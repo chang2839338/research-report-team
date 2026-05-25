@@ -85,7 +85,9 @@ python .\scripts\research_team_cli.py "AI agent team 업무 방식 의사결정 
 Expected result:
 
 - A new folder appears under `tmp-cli-test`.
-- The folder includes `task.json`, `draft.md`, `sources.md`, and `review.md`.
+- The folder includes `task.json`, `status.json`, `sources.md`, `prompts/`, and `artifacts/`.
+- `prompts/` includes Manager, Researcher, Analyst, Writer, and Reviewer prompt files with task context.
+- `artifacts/` includes placeholders for research, analysis, draft, review, and final report.
 
 After testing, delete the temporary folder if it is not needed.
 

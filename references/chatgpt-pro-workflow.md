@@ -108,12 +108,16 @@ python .\scripts\research_team_cli.py "your report request" --title "short title
 
 Then copy useful outputs into the generated files:
 
-- `draft.md`: report draft.
+- `artifacts/research.md`: research findings.
+- `artifacts/analysis.md`: option comparison and recommendation logic.
+- `artifacts/draft.md`: report draft.
+- `artifacts/review.md`: Reviewer feedback.
+- `artifacts/final.md`: final report.
 - `sources.md`: source links and notes.
-- `review.md`: Reviewer feedback.
 - `task.json`: task metadata created by the CLI.
+- `status.json`: lightweight progress notes.
 
-Future CLI versions may create a richer `artifacts/` folder. Until then, keep the final report in `draft.md` or a manually created `final.md`.
+Start from `prompts/manager.md` when pasting task context into ChatGPT Pro.
 
 ## Practical Tips
 
