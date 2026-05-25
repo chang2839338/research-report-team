@@ -82,4 +82,7 @@ Read these references only when needed:
 - `references/workflow.md` for the full team loop and revision rules.
 - `references/report-quality-rubric.md` for review scoring.
 - `references/output-templates.md` for reusable report formats.
-
+- `references/chatgpt-pro-workflow.md` for using this skill through ChatGPT Pro without API calls.
+- `references/install-and-update.md` for installing or updating the skill from GitHub.
+- `references/task-contract.md` for consistent task briefs, role tasks, and artifacts.
+- `prompts/` for role-specific prompt files when role behavior needs to be explicit or reusable.
