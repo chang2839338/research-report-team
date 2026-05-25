@@ -132,7 +132,10 @@ GitHub 원문: https://github.com/chang2839338/research-report-team/issues/5
 - [ ] 비용, 자동화 가치, 업무 빈도, 모바일/원격 접근 필요성을 판단 요소로 포함한다.
 - [ ] 위 조건이 충족되기 전까지 API/web app 작업은 보류한다고 명시한다.
 
+### 적용할 기본 방향
+
+보수적 기준을 적용한다. 지금은 ChatGPT Pro 기반 skill workflow를 우선하고, API/agent runner/web app은 실제 반복 사용과 자동화 가치가 확인된 뒤 검토한다.
+
 ### 선행 작업
 
 - #4 완료 필요.
-
