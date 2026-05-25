@@ -86,5 +86,6 @@ Read these references only when needed:
 - `references/install-and-update.md` for installing or updating the skill from GitHub.
 - `references/task-contract.md` for consistent task briefs, role tasks, and artifacts.
 - `references/quality-checklist.md` for final report approval checks.
+- `references/deferred-automation-criteria.md` for deciding when API, agent runner, or web app work is justified.
 - `prompts/` for role-specific prompt files when role behavior needs to be explicit or reusable.
 - `examples/` for sample decision briefs, research memos, and reviewer feedback.

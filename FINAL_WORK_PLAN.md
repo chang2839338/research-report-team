@@ -180,6 +180,8 @@ research-team-runs/
 - PC/모바일 web app.
 - 알림 기능.
 
+전환 기준은 `references/deferred-automation-criteria.md`에 따른다. 현재 기본 결정은 보수적 기준이다. 즉, ChatGPT Pro 기반 workflow를 여러 번 실제로 사용해 보고 반복 업무, 수동 정리 부담, 원격 접근 필요성, API 비용 대비 시간 절약 효과가 명확해질 때만 자동화 전환을 검토한다.
+
 ## Agent 운영 방식
 
 ### 현재 방식
@@ -281,4 +283,3 @@ git push
 - 웹앱 개발은 필요성이 커진 뒤 다시 검토한다.
 - 기본 실행 환경은 사용자의 PC와 ChatGPT Pro다.
 - GitHub는 배포, 버전 관리, 이슈 관리 용도로 사용한다.
-
