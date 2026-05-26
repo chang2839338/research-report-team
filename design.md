@@ -24,6 +24,8 @@ The app is a quiet operations console for report production. It prioritizes prog
 - Clicking a progress step selects that Agent.
 - Status labels are short: `대기`, `진행중`, `완료`, `실패`.
 - Running jobs update automatically by polling the run API.
+- When showing `prompt 발송`, previous artifact inputs are shown only as `# Input: artifacts/...` headers; their full bodies are omitted from the screen because they can be opened from the prior Agent step.
+- User-facing labels should use the same concise Korean operations-console voice across buttons, empty states, status text, and panel labels.
 
 ## Storage Rules
 

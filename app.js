@@ -1,3 +1,15 @@
+const STATUS = {
+  queued: "대기",
+  running: "진행중",
+  completed: "완료",
+  failed: "실패",
+};
+
+const VIEW_LABEL = {
+  prompt: "prompt 발송",
+  artifact: "AI 회신",
+};
+
 const elements = {
   runForm: document.querySelector("#runForm"),
   titleInput: document.querySelector("#titleInput"),
@@ -71,7 +83,7 @@ async function createRun(title, brief) {
 
 function setRunButton(isRunning) {
   elements.runButton.disabled = isRunning;
-  elements.runButton.querySelector("span:last-child").textContent = isRunning ? "실행 중..." : "보고서 작업 실행";
+  elements.runButton.querySelector("span:last-child").textContent = isRunning ? "실행 중..." : "작업 실행";
 }
 
 function render() {
@@ -85,7 +97,7 @@ function render() {
   const completed = completedRoleKeys(status);
 
   elements.workspaceTitle.textContent = task.title;
-  elements.statusMessage.textContent = status.error || buildStatusMessage(status);
+  elements.statusMessage.textContent = status.error ? "실패" : translateState(status.state);
   elements.selectedRole.textContent = selectedRole.display_role || selectedRole.role;
   elements.selectedLabel.textContent = selectedRole.label;
   elements.selectedState.textContent = roleStateLabel(selectedRole, status, completed);
@@ -97,7 +109,7 @@ function render() {
 
 function renderEmpty() {
   elements.workspaceTitle.textContent = "보고서 작업을 시작하세요";
-  elements.statusMessage.textContent = "제목과 내용을 입력한 뒤 실행하세요.";
+  elements.statusMessage.textContent = "대기";
   elements.stepList.innerHTML = "";
   elements.detailViewer.textContent = "진행 단계에서 Agent를 선택하세요.";
   elements.finalViewer.textContent = "아직 최종 보고서가 없습니다.";
@@ -107,7 +119,7 @@ function renderEmpty() {
 
 function renderRunList(runs) {
   if (!runs.length) {
-    elements.runList.innerHTML = `<p class="empty-note">아직 저장된 작업이 없습니다.</p>`;
+    elements.runList.innerHTML = `<p class="empty-note">저장된 작업이 없습니다.</p>`;
     return;
   }
 
@@ -163,8 +175,37 @@ async function loadVisibleFiles() {
     readRunFile("artifacts/05_final.md"),
   ]);
 
-  elements.detailViewer.textContent = detail || `${selectedViewLabel(selectedView)} 파일이 아직 생성되지 않았습니다.`;
+  const visibleDetail = selectedView === "prompt" ? summarizePromptInputs(detail) : detail;
+  elements.detailViewer.textContent = visibleDetail || `${VIEW_LABEL[selectedView]} 파일이 아직 생성되지 않았습니다.`;
   elements.finalViewer.textContent = final || "아직 최종 보고서가 없습니다.";
+}
+
+function summarizePromptInputs(promptText) {
+  if (!promptText) return "";
+  const lines = promptText.split(/\r?\n/);
+  const output = [];
+  let skipInputBody = false;
+
+  for (const line of lines) {
+    if (line.startsWith("# Input: artifacts/")) {
+      output.push(line);
+      output.push("(이전 Agent 회신 본문은 화면 표시에서 생략했습니다.)");
+      skipInputBody = true;
+      continue;
+    }
+
+    if (skipInputBody && isPromptSectionHeading(line)) {
+      skipInputBody = false;
+    }
+
+    if (!skipInputBody) output.push(line);
+  }
+
+  return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function isPromptSectionHeading(line) {
+  return /^# (Reference:|Final Report Instruction|Role Prompt|Run Context)/.test(line);
 }
 
 function readRunFile(path) {
@@ -221,28 +262,8 @@ function stateClass(state) {
   }[state] || "";
 }
 
-function buildStatusMessage(status) {
-  if (status.state === "completed") return "완료";
-  if (status.state === "failed") return "실패";
-  if (status.state === "running") return "진행중";
-  if (status.state === "queued") return "대기";
-  return "대기";
-}
-
 function translateState(state) {
-  return {
-    queued: "대기",
-    running: "진행중",
-    completed: "완료",
-    failed: "실패",
-  }[state] || "대기";
-}
-
-function selectedViewLabel(view) {
-  return {
-    prompt: "prompt 발송",
-    artifact: "AI 회신",
-  }[view] || "파일";
+  return STATUS[state] || "대기";
 }
 
 function escapeHtml(value) {
