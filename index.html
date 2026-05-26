@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Research Report Team</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="mark">R</span>
+          <div>
+            <h1>Research Report Team</h1>
+            <p>Decision report workspace</p>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>보고서 제목</span>
+          <input id="titleInput" type="text" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          <span>요청 브리프</span>
+          <textarea id="briefInput" rows="8"></textarea>
+        </label>
+
+        <div class="sidebar-actions">
+          <button id="newRunButton" type="button">새 작업</button>
+          <button id="exportButton" type="button">JSON 내보내기</button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <section class="topbar">
+          <div>
+            <p class="eyebrow">web-deploy</p>
+            <h2 id="workspaceTitle">Untitled report</h2>
+          </div>
+          <div class="status-strip" aria-label="workflow status">
+            <span id="currentRole">Manager</span>
+            <span id="savedState">Saved locally</span>
+          </div>
+        </section>
+
+        <section class="tabs" aria-label="artifact tabs">
+          <button class="tab active" type="button" data-artifact="00_task_brief">Task Brief</button>
+          <button class="tab" type="button" data-artifact="01_research">Research</button>
+          <button class="tab" type="button" data-artifact="02_analysis">Analysis</button>
+          <button class="tab" type="button" data-artifact="03_draft">Draft</button>
+          <button class="tab" type="button" data-artifact="04_review">Review</button>
+          <button class="tab" type="button" data-artifact="05_final">Final</button>
+        </section>
+
+        <section class="editor-layout">
+          <article class="editor-pane">
+            <div class="pane-header">
+              <div>
+                <p class="eyebrow" id="artifactRole">Manager</p>
+                <h3 id="artifactTitle">Task Brief</h3>
+              </div>
+              <button id="downloadMarkdownButton" type="button">MD 다운로드</button>
+            </div>
+            <textarea id="artifactEditor" spellcheck="false"></textarea>
+          </article>
+
+          <aside class="prompt-pane">
+            <div class="pane-header">
+              <div>
+                <p class="eyebrow">Role Prompt</p>
+                <h3 id="promptTitle">Manager</h3>
+              </div>
+              <button id="copyPromptButton" type="button">복사</button>
+            </div>
+            <pre id="promptText"></pre>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
