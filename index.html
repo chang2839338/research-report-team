@@ -11,106 +11,66 @@
       <aside class="sidebar">
         <div class="brand">
           <span class="mark">R</span>
-          <div>
-            <h1>Research Report Team</h1>
-            <p>Codex Pro 실행 패킷 콘솔</p>
-          </div>
+          <h1>Research Report Team</h1>
         </div>
 
-        <label class="field">
-          <span>보고서 제목</span>
-          <input id="titleInput" type="text" autocomplete="off" />
-        </label>
+        <form id="runForm" class="run-form">
+          <label class="field">
+            <span>보고서 제목</span>
+            <input id="titleInput" type="text" autocomplete="off" placeholder="예: 시장 진입 전략 보고서" />
+          </label>
 
-        <label class="field">
-          <span>요청 브리프</span>
-          <textarea id="briefInput" rows="7"></textarea>
-        </label>
+          <label class="field">
+            <span>보고서 내용</span>
+            <textarea id="briefInput" rows="10" placeholder="목표, 배경, 알고 싶은 점을 적어주세요."></textarea>
+          </label>
 
-        <div class="sidebar-actions">
-          <button id="newRunButton" class="button-primary" type="button">새 작업</button>
-          <button id="exportButton" class="button-secondary" type="button">JSON 내보내기</button>
-        </div>
+          <button id="runButton" class="run-button" type="submit">
+            <span aria-hidden="true">▶</span>
+            <span>보고서 작업 실행</span>
+          </button>
+        </form>
 
-        <section class="progress-panel" aria-label="workflow progress">
-          <p class="eyebrow">Workflow</p>
-          <ol id="stepList" class="step-list"></ol>
+        <section class="runs-panel" aria-label="recent runs">
+          <p class="section-label">최근 작업</p>
+          <div id="runList" class="run-list"></div>
         </section>
       </aside>
 
       <main class="workspace">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">web-deploy · 반자동 Codex Pro 흐름</p>
-            <h2 id="workspaceTitle">Untitled report</h2>
-          </div>
-          <div class="status-strip" aria-label="workflow status">
-            <span id="currentRole">Manager</span>
-            <span id="savedState">Saved locally</span>
-          </div>
+        <header class="workspace-head">
+          <h2 id="workspaceTitle">보고서 작업을 시작하세요</h2>
+          <p id="statusMessage">제목과 내용을 입력한 뒤 실행하세요.</p>
         </header>
 
-        <section class="hero-card">
-          <div>
-            <p class="eyebrow">Current Step</p>
-            <h3 id="stepHeadline">Task Brief 준비</h3>
-            <p id="stepSummary">
-              Codex Pro에 넘길 실행 패킷을 복사하고, 결과를 붙여넣어 다음 단계로 진행합니다.
-            </p>
-          </div>
-          <div class="hero-actions">
-            <button id="copyCodexButton" class="button-on-dark" type="button">Codex Pro에 복사</button>
-            <button id="nextStageButton" class="button-secondary-on-dark" type="button">다음 단계</button>
-            <button id="downloadMarkdownButton" class="button-secondary-on-dark" type="button">MD 다운로드</button>
-          </div>
+        <section class="progress-panel" aria-label="workflow progress">
+          <p class="section-label">진행 단계</p>
+          <ol id="stepList" class="step-list"></ol>
         </section>
 
-        <nav class="tabs" aria-label="artifact tabs">
-          <button class="tab active" type="button" data-artifact="00_task_brief">Task Brief</button>
-          <button class="tab" type="button" data-artifact="01_research">Research</button>
-          <button class="tab" type="button" data-artifact="02_analysis">Analysis</button>
-          <button class="tab" type="button" data-artifact="03_draft">Draft</button>
-          <button class="tab" type="button" data-artifact="04_review">Review</button>
-          <button class="tab" type="button" data-artifact="05_final">Final</button>
-        </nav>
-
-        <section class="console-layout">
-          <article class="editor-pane">
-            <div class="pane-header">
-              <div>
-                <p class="eyebrow" id="artifactRole">Manager</p>
-                <h3 id="artifactTitle">Task Brief</h3>
-              </div>
-              <span id="artifactState" class="state-badge">작성 필요</span>
+        <section class="output-grid">
+          <article class="output-panel final-panel">
+            <div class="panel-head">
+              <p class="section-label">최종 보고서</p>
+              <span id="finalState" class="state-badge">대기</span>
             </div>
-            <textarea id="artifactEditor" spellcheck="false"></textarea>
+            <pre id="finalViewer" class="markdown-viewer">아직 최종 보고서가 없습니다.</pre>
           </article>
 
-          <aside class="assistant-pane">
-            <section class="packet-card">
-              <div class="pane-header compact">
-                <div>
-                  <p class="eyebrow">Codex Packet</p>
-                  <h3 id="packetTitle">Manager 실행 지시</h3>
-                </div>
-                <button id="copyPacketSmallButton" class="button-secondary" type="button">복사</button>
+          <article class="output-panel">
+            <div class="panel-head">
+              <div>
+                <p class="section-label" id="selectedRole">Manager</p>
+                <h3 id="selectedLabel">Task Brief</h3>
               </div>
-              <div id="requirementList" class="requirements"></div>
-              <textarea id="packetText" class="packet-text" readonly spellcheck="false"></textarea>
-            </section>
-
-            <section class="paste-card">
-              <div class="pane-header compact">
-                <div>
-                  <p class="eyebrow">Codex Result</p>
-                  <h3>결과 붙여넣기</h3>
-                </div>
-                <button id="applyResultButton" class="button-primary" type="button">Artifact에 반영</button>
-              </div>
-              <textarea id="resultInput" class="result-input" rows="8" placeholder="Codex Pro가 생성한 Markdown 결과를 여기에 붙여넣으세요."></textarea>
-              <p id="nextStepHint" class="hint-text"></p>
-            </section>
-          </aside>
+              <span id="selectedState" class="state-badge">대기</span>
+            </div>
+            <div class="subtabs" role="tablist" aria-label="selected role files">
+              <button class="subtab active" type="button" data-view="prompt">prompt 발송</button>
+              <button class="subtab" type="button" data-view="artifact">AI 회신</button>
+            </div>
+            <pre id="detailViewer" class="markdown-viewer">진행 단계에서 Agent를 선택하세요.</pre>
+          </article>
         </section>
       </main>
     </div>
