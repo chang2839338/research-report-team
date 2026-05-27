@@ -109,6 +109,14 @@ h1 {
   line-height: 1.25;
 }
 
+.last-updated {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
 h2 {
   color: var(--ink);
   font-size: 34px;
