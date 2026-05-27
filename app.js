@@ -515,6 +515,7 @@ function formatDateTime(value) {
 
 function roleStateLabel(role, status, completed) {
   if (completed.has(role.key)) return "\uc644\ub8cc";
+  if (role.key === "revision_writer" && status.revision_status?.status === "not_required") return "\uc218\uc815 \ubd88\ud544\uc694";
   if (status.state === "failed" && isCurrentRole(role, status)) return "\uc2e4\ud328";
   if (["running", "needs_revision", "publishing", "blocked", "needs_clarification"].includes(status.state) && isCurrentRole(role, status)) return translateState(status.state);
   return "\ub300\uae30";
@@ -530,6 +531,7 @@ function stateClass(state) {
     "\uc9c4\ud589 \uc911": "active",
     "\uc218\uc815 \ud544\uc694": "active",
     "\uac8c\uc2dc \uc911": "active",
+    "\uc218\uc815 \ubd88\ud544\uc694": "done",
     "\uc2e4\ud328": "failed",
     "\ucc28\ub2e8": "failed",
     "\ud655\uc778 \ud544\uc694": "active",
