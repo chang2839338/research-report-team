@@ -17,6 +17,8 @@ const STATUS = {
 
 const TERMINAL_STATES = new Set(["completed", "completed_with_unresolved_issues", "completed_markdown_only", "failed", "blocked", "cancelled", "needs_clarification"]);
 
+const DISPLAY_LAST_ARTIFACTS = new Set(["03_analysis.md", "04_draft.md", "05_review.md", "06_revision.md"]);
+
 const elements = {
   runForm: document.querySelector("#runForm"),
   titleInput: document.querySelector("#titleInput"),
@@ -384,14 +386,25 @@ function findSelectedRole() {
 
 function viewsForRole(role) {
   if (!role) return [];
+  const artifactViews = (role.artifacts || [{ label: role.label, path: role.artifact }]).map((artifact) => ({
+    key: artifact.path,
+    label: artifact.label,
+    path: artifact.path,
+  }));
   return [
     ...(role.prompt ? [{ key: "prompt", label: "Prompt", path: role.prompt }] : []),
-    ...(role.artifacts || [{ label: role.label, path: role.artifact }]).map((artifact) => ({
-      key: artifact.path,
-      label: artifact.label,
-      path: artifact.path,
-    })),
+    ...orderArtifactViewsForDisplay(artifactViews),
   ];
+}
+
+function orderArtifactViewsForDisplay(views) {
+  const leading = [];
+  const trailing = [];
+  views.forEach((view) => {
+    const target = DISPLAY_LAST_ARTIFACTS.has(pathKeyForView(view)) ? trailing : leading;
+    target.push(view);
+  });
+  return [...leading, ...trailing];
 }
 
 function ensureSelectedView() {
@@ -454,8 +467,7 @@ function formatRunStatus(status, usage, durationMs) {
   const state = status?.state || "";
   const title = [status?.error || "", formatTokenUsageDetail(usage)].filter(Boolean).join("\n");
   if (state === "completed_with_unresolved_issues") {
-    const count = (status.unresolved_gate_issues || []).length;
-    return { text: `\uc870\uac74\ubd80 \uc644\ub8cc: \ubbf8\ud574\uacb0 \uac80\uc99d \uc774\uc288 ${formatNumber(count)}\uac74 \u00b7 ${usageText}`, title };
+    return { text: usageText, title };
   }
   if (["remediating", "continuing_with_issues"].includes(state)) {
     return { text: `${translateState(state)} \u00b7 ${usageText}`, title };
@@ -511,8 +523,12 @@ function formatRoleHeading(role) {
 }
 
 function descriptionForView(view) {
-  const pathKey = (view.path || view.key || "").replace(/^artifacts\//, "").replace(/^prompts\//, "");
+  const pathKey = pathKeyForView(view);
   return VIEW_DESCRIPTIONS[pathKey] || VIEW_DESCRIPTIONS[view.key] || "\uc120\ud0dd\ud55c \uc0b0\ucd9c\ubb3c\uc758 \ub0b4\uc6a9\uc744 \ubcf4\uc5ec\uc90d\ub2c8\ub2e4.";
+}
+
+function pathKeyForView(view) {
+  return (view.path || view.key || "").replace(/^artifacts\//, "").replace(/^prompts\//, "");
 }
 
 function durationForRole(role, status, completed) {
