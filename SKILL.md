@@ -12,9 +12,12 @@ Act as the Manager of a research and report-writing team. Keep the core roles st
 Core roles:
 - Manager: clarify intent, define done, split work, assign roles, inspect outputs, request revisions, and deliver the final report.
 - Researcher: gather current information, sources, facts, market context, examples, and evidence.
+- Evidence Auditor: check source, claim, and numeric traceability before analysis.
 - Analyst: compare options, define decision criteria, evaluate tradeoffs, identify implications, and make recommendations.
 - Writer: turn approved findings into a clear report with the requested tone, format, and audience fit.
 - Reviewer: check whether the draft satisfies the user's goal, evidence quality, source traceability, logic, completeness, and format.
+- Revision Writer: apply targeted revisions when the review is not cleanly approved.
+- Final Verifier: run the last quality gate before publication.
 
 Temporary specialist roles may be added for domain-specific work, such as Market Expert, Technical Evaluator, Legal/Policy Checker, Financial Analyst, Risk Analyst, or Korean Executive Editor.
 
@@ -25,13 +28,15 @@ Temporary specialist roles may be added for domain-specific work, such as Market
 3. Create a small work plan. Prefer 3-6 tasks for normal reports. Assign each task to one core role or a temporary specialist.
 4. Run research before analysis. Use web browsing when the user asks for current information, market facts, regulations, company/product details, citations, or source-backed claims.
 5. Require source traceability for factual claims. Keep URLs, publication dates when available, and short notes on why each source matters.
-6. When the local Codex web workflow is used, the Researcher produces `01_research.md`, `01_sources.md`, `01_claims.md`, and `01_gaps.md` so downstream roles can audit sources and claim status.
-7. Have the Analyst synthesize evidence into decision criteria, options, tradeoffs, risks, and recommendation.
-8. Have the Writer produce the requested deliverable using the appropriate template from `references/output-templates.md` when helpful.
-9. Have the Reviewer score the draft against `references/report-quality-rubric.md`.
-10. If the draft fails material criteria, issue a targeted revision request and revise before final delivery.
-11. After the Reviewer approves or conditionally approves revisions, create the Manager final report as Markdown and also generate a Word `.docx` version of the final report when a local workspace is available. Store the Word file next to the final Markdown artifact, typically as `artifacts/05_final.docx`.
-12. Deliver the final answer with a concise executive summary, recommendation, key evidence, caveats, next actions, and the path to the Word file unless the user requested another format.
+6. When the local Codex web workflow is used, the Researcher produces `01_research.md`, `01_sources.md`, `01_claims.md`, `01_gaps.md`, and `01_numeric_assumptions.md` so downstream roles can audit sources, claims, and numbers.
+7. Have the Evidence Auditor block unsupported claims and identify evidence that must be caveated before analysis.
+8. Have the Analyst synthesize audited evidence into decision criteria, anchor values, adjustment logic, scenarios, tradeoffs, risks, and recommendation.
+9. Have the Writer produce the requested deliverable using the appropriate template from `references/output-templates.md` when helpful.
+10. Have the Reviewer score the draft against `references/report-quality-rubric.md` and audit material factual and numeric claims.
+11. If the draft is marked `Needs revision` or `Approved with targeted revisions`, have the Revision Writer apply the smallest useful revision.
+12. Have the Final Verifier confirm the final candidate is ready to publish.
+13. Publish `08_final.md`, generate `08_final.docx` locally, and write `08_final_manifest.json`. Treat the run as complete only when all three exist.
+14. Deliver the final answer with a concise executive summary, recommendation, key evidence, caveats, next actions, and the path to the Word file unless the user requested another format.
 
 ## Question Policy
 
@@ -79,15 +84,19 @@ have not yet been captured in the task brief.
 
 Default role inputs:
 - Researcher: `00_task_brief.md` and `prompts/researcher.md`.
-- Analyst: `00_task_brief.md`, `01_research.md`, `01_claims.md`, `01_gaps.md`, and `prompts/analyst.md`.
-- Writer: `00_task_brief.md`, `01_research.md`, `01_claims.md`, `02_analysis.md`, and `prompts/writer.md`.
-- Reviewer: `00_task_brief.md`, `01_sources.md`, `01_claims.md`, `01_gaps.md`, `02_analysis.md`, `03_draft.md`, `prompts/reviewer.md`, and `references/report-quality-rubric.md`.
+- Evidence Auditor: `00_task_brief.md`, `01_research.md`, `01_sources.md`, `01_claims.md`, `01_gaps.md`, `01_numeric_assumptions.md`, and `prompts/evidence_auditor.md`.
+- Analyst: `00_task_brief.md`, `01_research.md`, `01_claims.md`, `01_gaps.md`, `01_numeric_assumptions.md`, `02_evidence_audit.md`, and `prompts/analyst.md`.
+- Writer: `00_task_brief.md`, `01_research.md`, `01_claims.md`, `01_numeric_assumptions.md`, `02_evidence_audit.md`, `03_analysis.md`, and `prompts/writer.md`.
+- Reviewer: `00_task_brief.md`, `01_sources.md`, `01_claims.md`, `01_gaps.md`, `01_numeric_assumptions.md`, `02_evidence_audit.md`, `03_analysis.md`, `04_draft.md`, `prompts/reviewer.md`, and `references/report-quality-rubric.md`.
+- Revision Writer: `00_task_brief.md`, `03_analysis.md`, `04_draft.md`, `05_review.md`, and `prompts/revision_writer.md`.
+- Final Verifier: `00_task_brief.md`, source and claim artifacts, `03_analysis.md`, draft/revision artifacts, `prompts/final_verifier.md`, and `references/quality-checklist.md`.
 
 ## Word Output
 
 When the workflow creates local artifacts, produce both:
-- `artifacts/05_final.md` for the auditable Markdown final report.
-- `artifacts/05_final.docx` for the user-facing Word report.
+- `artifacts/08_final.md` for the auditable Markdown final report.
+- `artifacts/08_final.docx` for the user-facing Word report.
+- `artifacts/08_final_manifest.json` for publication metadata.
 
 Use the final approved Markdown as the source of truth. Prefer an installed
 converter such as `pandoc` when available. If no converter is available, create
@@ -115,4 +124,4 @@ Read these references only when needed:
 - `references/task-contract.md` for consistent task briefs, role tasks, and artifacts.
 - `references/quality-checklist.md` for final report approval checks.
 - `references/deferred-automation-criteria.md` for deciding when API, agent runner, or web app work is justified.
-- `prompts/` for numbered role-specific prompt files when role behavior needs to be explicit or reusable, using `01_manager.md`, `02_researcher.md`, `03_analyst.md`, `04_writer.md`, and `05_reviewer.md` order.
+- `prompts/` for numbered role-specific prompt files when role behavior needs to be explicit or reusable, using `00_manager.md` through `08_publisher.md` order.

@@ -23,7 +23,7 @@ You are the Researcher. Your job is to collect, organize, and verify source-back
 
 ## Required Output Contract
 
-Return exactly four artifact sections in one Markdown response. Start each section with the exact marker shown below. Do not wrap the answer in code fences.
+Return exactly five artifact sections in one Markdown response. Start each section with the exact marker shown below. Do not wrap the answer in code fences.
 
 <!-- artifact: 01_research.md -->
 
@@ -97,6 +97,18 @@ Write the research gaps and risk log:
 ### Follow-Up Searches
 
 - [Specific query/source to check if more time or access is available.]
+```
+
+<!-- artifact: 01_numeric_assumptions.md -->
+
+Write the numeric assumptions ledger. Include every number that downstream roles might reuse, including market prices, rates, growth estimates, dates, ranges, rankings, counts, and derived estimates.
+
+```markdown
+## Numeric Assumptions Ledger
+
+| Value | Unit | Period | Source ID | Direct Or Derived | Confidence | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| [number/range] | [unit] | [date or period] | S1 | direct/derived | high/medium/low | How it should and should not be used |
 ```
 
 ## Failure Rules

@@ -6,11 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
-import os
-import shutil
-import subprocess
 import threading
-import traceback
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,77 +14,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-
-ROLES = [
-    {
-        "key": "manager",
-        "role": "Manager",
-        "display_role": "Manager",
-        "label": "Task Brief",
-        "prompt": "manager.md",
-        "prompt_file": "01_manager.md",
-        "artifact": "00_task_brief.md",
-        "inputs": [],
-        "goal": "Create the task brief that will guide all later role work.",
-    },
-    {
-        "key": "researcher",
-        "role": "Researcher",
-        "display_role": "Researcher",
-        "label": "Research",
-        "prompt": "researcher.md",
-        "prompt_file": "02_researcher.md",
-        "artifact": "01_research.md",
-        "extra_artifacts": ["01_sources.md", "01_claims.md", "01_gaps.md"],
-        "inputs": ["00_task_brief.md"],
-        "goal": "Gather source-backed findings and uncertainty notes.",
-    },
-    {
-        "key": "analyst",
-        "role": "Analyst",
-        "display_role": "Analyst",
-        "label": "Analysis",
-        "prompt": "analyst.md",
-        "prompt_file": "03_analyst.md",
-        "artifact": "02_analysis.md",
-        "inputs": ["00_task_brief.md", "01_research.md", "01_claims.md", "01_gaps.md"],
-        "goal": "Turn the research into criteria, tradeoffs, risks, and recommendation.",
-    },
-    {
-        "key": "writer",
-        "role": "Writer",
-        "display_role": "Writer",
-        "label": "Draft",
-        "prompt": "writer.md",
-        "prompt_file": "04_writer.md",
-        "artifact": "03_draft.md",
-        "inputs": ["00_task_brief.md", "01_research.md", "01_claims.md", "02_analysis.md"],
-        "goal": "Draft a decision-ready report from the brief, research, and analysis.",
-    },
-    {
-        "key": "reviewer",
-        "role": "Reviewer",
-        "display_role": "Reviewer",
-        "label": "Review",
-        "prompt": "reviewer.md",
-        "prompt_file": "05_reviewer.md",
-        "artifact": "04_review.md",
-        "inputs": ["00_task_brief.md", "01_sources.md", "01_claims.md", "01_gaps.md", "02_analysis.md", "03_draft.md"],
-        "extra_inputs": ["references/report-quality-rubric.md"],
-        "goal": "Review the draft against the quality rubric and request targeted revisions if needed.",
-    },
-    {
-        "key": "final_manager",
-        "role": "Manager",
-        "display_role": "Final",
-        "label": "Final Report",
-        "prompt": "manager.md",
-        "prompt_file": "06_final_manager.md",
-        "artifact": "05_final.md",
-        "inputs": ["00_task_brief.md", "01_research.md", "01_sources.md", "01_claims.md", "01_gaps.md", "02_analysis.md", "03_draft.md", "04_review.md"],
-        "goal": "Create the final Markdown report. Do not create a DOCX file.",
-    },
-]
+from codex_runner import CodexConfig, CodexRunner, resolve_codex_bin
+from contracts import public_roles, split_artifact_sections
+from store import RunStore, safe_child
+from workflow import WorkflowEngine
 
 
 @dataclass(frozen=True)
@@ -104,201 +33,40 @@ class ServerConfig:
 class ResearchTeamServer:
     def __init__(self, config: ServerConfig) -> None:
         self.config = config
-        self.config.runs_dir.mkdir(parents=True, exist_ok=True)
+        self.store = RunStore(config.runs_dir)
+        self.runner = CodexRunner(
+            CodexConfig(
+                codex_bin=config.codex_bin,
+                codex_model=config.codex_model,
+                codex_sandbox=config.codex_sandbox,
+                job_timeout=config.job_timeout,
+            )
+        )
+        self.engine = WorkflowEngine(config.root, self.store, self.runner)
         self._lock = threading.Lock()
 
-    def create_run(self, title: str, brief: str) -> dict[str, Any]:
+    def create_run(self, title: str, brief: str, mode: str = "quality-first") -> dict[str, Any]:
         title = title.strip() or "Untitled report"
         brief = brief.strip()
         if not brief:
             raise ValueError("보고서 내용을 입력하세요.")
+        mode = mode.strip() or "quality-first"
+        if mode != "quality-first":
+            raise ValueError("unsupported mode")
 
         run_id = self._unique_run_id()
-        run_dir = self.config.runs_dir / run_id
-        for name in ["prompts", "artifacts"]:
-            (run_dir / name).mkdir(parents=True, exist_ok=True)
-
-        now = _now()
-        _write_json(
-            run_dir / "task.json",
-            {
-                "id": run_id,
-                "created_at": now,
-                "title": title,
-                "brief": brief,
-                "workflow": "codex-auto-local-web",
-                "outputs": {"final_markdown": "artifacts/05_final.md"},
-                "roles": _public_roles(),
-            },
-        )
-        _write_json(
-            run_dir / "status.json",
-            {
-                "id": run_id,
-                "created_at": now,
-                "updated_at": now,
-                "state": "queued",
-                "current_role": "",
-                "completed_roles": [],
-                "agent_runs": [],
-                "error": "",
-            },
-        )
-
-        threading.Thread(target=self._run_workflow, args=(run_id,), daemon=True).start()
+        self.store.create_run(run_id, title, brief, mode)
+        threading.Thread(target=self.engine.run_workflow, args=(run_id,), daemon=True).start()
         return self.get_run(run_id)
 
     def list_runs(self) -> list[dict[str, Any]]:
-        runs = []
-        for path in sorted(self.config.runs_dir.iterdir(), reverse=True):
-            if not path.is_dir():
-                continue
-            try:
-                runs.append(self.get_run(path.name))
-            except (OSError, ValueError, json.JSONDecodeError):
-                continue
-        return runs[:30]
+        return self.store.list_runs()
 
     def get_run(self, run_id: str) -> dict[str, Any]:
-        run_dir = self._run_dir(run_id)
-        return {
-            "id": run_id,
-            "task": _read_json(run_dir / "task.json"),
-            "status": _read_json(run_dir / "status.json"),
-            "roles": _public_roles(),
-            "files": _file_manifest(run_dir),
-        }
+        return self.store.get_run(run_id)
 
     def read_file(self, run_id: str, relative_path: str) -> str:
-        target = _safe_child(self._run_dir(run_id), relative_path)
-        if not target.is_file():
-            raise FileNotFoundError(relative_path)
-        return target.read_text(encoding="utf-8")
-
-    def _run_workflow(self, run_id: str) -> None:
-        run_dir = self._run_dir(run_id)
-        task = _read_json(run_dir / "task.json")
-
-        try:
-            for role in ROLES:
-                self._update_status(run_dir, state="running", current_role=role["key"])
-                usage = self._run_role(run_dir, task, role)
-                self._append_agent_run(run_dir, role, usage)
-            self._update_status(run_dir, state="completed", current_role="", error="")
-        except Exception:
-            detail = traceback.format_exc().strip()
-            (run_dir / "error.log").write_text(detail, encoding="utf-8", errors="replace")
-            self._update_status(run_dir, state="failed", error=detail)
-
-    def _run_role(self, run_dir: Path, task: dict[str, Any], role: dict[str, Any]) -> dict[str, int]:
-        prompt = self._build_execution_prompt(role, task, run_dir)
-        prompt_path = run_dir / "prompts" / role["prompt_file"]
-        artifact_path = run_dir / "artifacts" / role["artifact"]
-        last_message_path = artifact_path.with_suffix(".last.md")
-
-        prompt_path.write_text(prompt, encoding="utf-8")
-        result = self._run_codex(prompt, run_dir, last_message_path)
-        usage = _extract_token_usage(result.stdout)
-        reply = _strip_markdown_fence(_read_last_message(last_message_path))
-
-        if result.returncode != 0:
-            detail = _compact_codex_output(result)
-            if reply:
-                detail = f"{detail}\n\nLast message:\n{reply}".strip()
-            raise RuntimeError(f"{role['role']} Codex exited {result.returncode}: {detail}")
-        if not reply.strip():
-            raise RuntimeError(f"{role['role']} returned an empty artifact")
-
-        artifact_names = [role["artifact"], *role.get("extra_artifacts", [])]
-        if role.get("extra_artifacts"):
-            sections = _split_artifact_sections(reply, artifact_names)
-            for name, content in sections.items():
-                (run_dir / "artifacts" / name).write_text(content, encoding="utf-8")
-        else:
-            artifact_path.write_text(reply, encoding="utf-8")
-        return usage
-
-    def _run_codex(self, prompt: str, cwd: Path, last_message_path: Path) -> subprocess.CompletedProcess[str]:
-        command = [
-            _resolve_codex_bin(self.config.codex_bin),
-            "exec",
-            "--skip-git-repo-check",
-            "--sandbox",
-            self.config.codex_sandbox,
-            "--cd",
-            str(cwd),
-            "--color",
-            "never",
-            "--json",
-            "--output-last-message",
-            str(last_message_path),
-        ]
-        if self.config.codex_model:
-            command.extend(["--model", self.config.codex_model])
-        command.append("-")
-
-        try:
-            return subprocess.run(
-                command,
-                input=prompt,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                cwd=str(cwd),
-                capture_output=True,
-                timeout=self.config.job_timeout,
-                env=_utf8_environment(),
-            )
-        except FileNotFoundError as exc:
-            raise FileNotFoundError(f"Codex 실행 파일을 찾을 수 없습니다: {command[0]!r}") from exc
-
-    def _build_execution_prompt(self, role: dict[str, Any], task: dict[str, Any], run_dir: Path) -> str:
-        role_prompt = (self.config.root / "prompts" / role["prompt"]).read_text(encoding="utf-8")
-        context_parts = [
-            "# Run Context",
-            f"- Report title: {task['title']}",
-            f"- User request: {task['brief']}",
-            f"- Current role: {role['role']}",
-            f"- Current step: {role['label']}",
-            f"- Goal: {role['goal']}",
-            f"- Output artifact: artifacts/{role['artifact']}",
-            "- Output language: Korean unless the user request clearly requires another language.",
-            "- This local web workflow creates Markdown only. Ignore any DOCX instructions in the role prompt.",
-            "- Output only the Markdown body for the target artifact.",
-            "- Do not wrap the answer in code fences.",
-            "- Do not create DOCX files.",
-            "- Do not edit local files; the server will save your final answer.",
-        ]
-        if role.get("extra_artifacts"):
-            markers = [role["artifact"], *role["extra_artifacts"]]
-            context_parts.extend(
-                [
-                    "- This role must return multiple artifact sections in one Markdown response.",
-                    "- Start each artifact section with the exact marker shown below.",
-                    "- Do not omit, rename, translate, or wrap artifact markers in code fences.",
-                    *[f"  - <!-- artifact: {name} -->" for name in markers],
-                ]
-            )
-        context_parts.extend(["", "# Role Prompt", role_prompt])
-
-        for artifact in role.get("inputs", []):
-            context_parts.extend(["", f"# Input: artifacts/{artifact}", _read_optional(run_dir / "artifacts" / artifact)])
-
-        for extra in role.get("extra_inputs", []):
-            context_parts.extend(["", f"# Reference: {extra}", _read_optional(self.config.root / extra)])
-
-        if role["artifact"] == "05_final.md":
-            context_parts.extend(
-                [
-                    "",
-                    "# Final Report Instruction",
-                    "Use the review notes to improve the draft before producing the final report. "
-                    "If the review approved the draft, polish and finalize it. If the review requested "
-                    "revisions, apply the smallest useful revision directly in the final report.",
-                ]
-            )
-
-        return "\n".join(context_parts).strip() + "\n"
+        return self.store.read_file(run_id, relative_path)
 
     def _unique_run_id(self) -> str:
         base = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -310,46 +78,14 @@ class ResearchTeamServer:
                 run_id = f"{base}_{suffix:02d}"
             return run_id
 
-    def _run_dir(self, run_id: str) -> Path:
-        if not run_id or "/" in run_id or "\\" in run_id or ".." in run_id:
-            raise ValueError("invalid run id")
-        run_dir = _safe_child(self.config.runs_dir, run_id)
-        if not run_dir.is_dir():
-            raise FileNotFoundError(run_id)
-        return run_dir
-
-    def _update_status(self, run_dir: Path, **updates: Any) -> None:
-        status_path = run_dir / "status.json"
-        status = _read_json(status_path)
-        status.update(updates)
-        status["updated_at"] = _now()
-        _write_json(status_path, status)
-
-    def _append_agent_run(self, run_dir: Path, role: dict[str, Any], usage: dict[str, int] | None = None) -> None:
-        status_path = run_dir / "status.json"
-        status = _read_json(status_path)
-        status["completed_roles"] = [*status.get("completed_roles", []), role["key"]]
-        entry: dict[str, Any] = {
-            "key": role["key"],
-            "role": role["role"],
-            "label": role["label"],
-            "artifact": f"artifacts/{role['artifact']}",
-            "prompt": f"prompts/{role['prompt_file']}",
-            "status": "completed",
-            "completed_at": _now(),
-        }
-        if role.get("extra_artifacts"):
-            entry["extra_artifacts"] = [f"artifacts/{name}" for name in role["extra_artifacts"]]
-        if usage:
-            entry["usage"] = usage
-        status.setdefault("agent_runs", []).append(entry)
-        status["updated_at"] = _now()
-        _write_json(status_path, status)
+    # Test hooks retained for focused harness tests.
+    def _run_role(self, run_dir: Path, task: dict[str, Any], role: Any) -> dict[str, int]:
+        return self.engine.run_role(run_dir, task, role)
 
 
 def make_handler(app: ResearchTeamServer) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "ResearchTeamServer/1.0"
+        server_version = "ResearchTeamServer/2.0"
 
         def do_GET(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
@@ -380,7 +116,12 @@ def make_handler(app: ResearchTeamServer) -> type[BaseHTTPRequestHandler]:
                     self._send_json({"error": "not found"}, status=404)
                     return
                 payload = self._read_json_body()
-                self._send_json(app.create_run(str(payload.get("title", "")), str(payload.get("brief", ""))), status=201)
+                run = app.create_run(
+                    str(payload.get("title", "")),
+                    str(payload.get("brief", "")),
+                    str(payload.get("mode", "quality-first")),
+                )
+                self._send_json(run, status=201)
             except ValueError as exc:
                 self._send_json({"error": str(exc)}, status=400)
             except Exception as exc:
@@ -396,12 +137,15 @@ def make_handler(app: ResearchTeamServer) -> type[BaseHTTPRequestHandler]:
 
         def _serve_static(self, url_path: str) -> None:
             relative = "index.html" if url_path in ["", "/"] else url_path.lstrip("/")
-            target = _safe_child(app.config.root, relative)
+            target = safe_child(app.config.root, relative)
             if not target.is_file():
                 raise FileNotFoundError(relative)
             data = target.read_bytes()
+            content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+            if content_type.startswith("text/") or content_type in ["application/javascript"]:
+                content_type = f"{content_type}; charset=utf-8"
             self.send_response(200)
-            self.send_header("Content-Type", mimetypes.guess_type(str(target))[0] or "application/octet-stream")
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -426,47 +170,11 @@ def make_handler(app: ResearchTeamServer) -> type[BaseHTTPRequestHandler]:
 
 
 def _public_roles() -> list[dict[str, Any]]:
-    roles = []
-    for role in ROLES:
-        item: dict[str, Any] = {
-            "key": role["key"],
-            "role": role["role"],
-            "display_role": role["display_role"],
-            "label": role["label"],
-            "prompt": f"prompts/{role['prompt_file']}",
-            "artifact": f"artifacts/{role['artifact']}",
-        }
-        if role.get("extra_artifacts"):
-            item["extra_artifacts"] = [f"artifacts/{name}" for name in role["extra_artifacts"]]
-        roles.append(item)
-    return roles
+    return public_roles()
 
 
-def _resolve_codex_bin(value: str) -> str:
-    found = shutil.which(value) or shutil.which(f"{value}.exe")
-    if found:
-        return found
-
-    candidates = sorted(Path.home().glob(".vscode/extensions/openai.chatgpt-*/bin/windows-x86_64/codex.exe"), reverse=True)
-    return str(candidates[0]) if candidates else value
-
-
-def _file_manifest(run_dir: Path) -> dict[str, bool]:
-    files: dict[str, bool] = {"error": (run_dir / "error.log").is_file()}
-    for role in _public_roles():
-        files[role["prompt"]] = (run_dir / role["prompt"]).is_file()
-        files[role["artifact"]] = (run_dir / role["artifact"]).is_file()
-        for artifact in role.get("extra_artifacts", []):
-            files[artifact] = (run_dir / artifact).is_file()
-    return files
-
-
-def _safe_child(root: Path, relative_path: str) -> Path:
-    root_resolved = root.resolve()
-    target = (root_resolved / relative_path).resolve()
-    if root_resolved != target and root_resolved not in target.parents:
-        raise ValueError("path escapes allowed directory")
-    return target
+def _split_artifact_sections(response: str, required_names: list[str]) -> dict[str, str]:
+    return split_artifact_sections(response, required_names)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -475,97 +183,6 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _read_optional(path: Path) -> str:
-    return path.read_text(encoding="utf-8") if path.exists() else "(not available yet)"
-
-
-def _read_last_message(path: Path) -> str:
-    try:
-        text = path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
-    try:
-        path.unlink()
-    except OSError:
-        pass
-    return text
-
-
-def _compact_codex_output(result: subprocess.CompletedProcess[str]) -> str:
-    text = "\n".join(part for part in [result.stdout, result.stderr] if part).strip()
-    return "\n".join(text.splitlines()[-40:]).strip() if text else ""
-
-
-def _extract_token_usage(output: str) -> dict[str, int]:
-    usage: dict[str, int] = {}
-    for line in output.splitlines():
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
-        event_usage = event.get("usage") if event.get("type") == "turn.completed" else None
-        if not isinstance(event_usage, dict):
-            continue
-
-        usage = {
-            key: int(value)
-            for key, value in event_usage.items()
-            if isinstance(value, (int, float)) and not isinstance(value, bool)
-        }
-    return usage
-
-
-def _strip_markdown_fence(response: str) -> str:
-    text = response.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-    return text
-
-
-def _split_artifact_sections(response: str, required_names: list[str]) -> dict[str, str]:
-    sections: dict[str, list[str]] = {}
-    current_name = ""
-
-    for line in response.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("<!-- artifact:") and stripped.endswith("-->"):
-            current_name = stripped.removeprefix("<!-- artifact:").removesuffix("-->").strip()
-            sections.setdefault(current_name, [])
-            continue
-        if current_name:
-            sections[current_name].append(line)
-
-    missing = [name for name in required_names if name not in sections]
-    if missing:
-        raise RuntimeError(f"required artifact section missing: {', '.join(missing)}")
-
-    parsed = {}
-    for name in required_names:
-        content = "\n".join(sections[name]).strip()
-        if not content:
-            raise RuntimeError(f"required artifact section empty: {name}")
-        parsed[name] = content + "\n"
-    return parsed
-
-
-def _now() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
-
-
-def _utf8_environment() -> dict[str, str]:
-    env = os.environ.copy()
-    env["PYTHONUTF8"] = "1"
-    env["PYTHONIOENCODING"] = "utf-8"
-    env["PYTHONLEGACYWINDOWSSTDIO"] = "0"
-    return env
 
 
 def main() -> int:
@@ -579,11 +196,12 @@ def main() -> int:
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
+    codex_bin = resolve_codex_bin(args.codex_bin)
     app = ResearchTeamServer(
         ServerConfig(
             root=root,
             runs_dir=root / "runs",
-            codex_bin=_resolve_codex_bin(args.codex_bin),
+            codex_bin=codex_bin,
             codex_model=args.codex_model,
             codex_sandbox=args.codex_sandbox,
             job_timeout=args.job_timeout,
@@ -599,3 +217,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

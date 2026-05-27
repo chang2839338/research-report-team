@@ -1,30 +1,16 @@
 const STATUS = {
-  queued: "대기",
-  running: "진행 중",
-  completed: "완료",
-  failed: "실패",
+  queued: "\ub300\uae30",
+  running: "\uc9c4\ud589 \uc911",
+  needs_revision: "\uc218\uc815 \ud544\uc694",
+  publishing: "\uac8c\uc2dc \uc911",
+  completed: "\uc644\ub8cc",
+  completed_markdown_only: "Markdown \uc644\ub8cc",
+  failed: "\uc2e4\ud328",
+  cancelled: "\ucde8\uc18c",
+  intake: "\uc900\ube44",
 };
 
-const BASE_VIEWS = [
-  { key: "prompt", label: "프롬프트" },
-  { key: "artifact", label: "AI 응답" },
-];
-
-const RESEARCH_VIEWS = [
-  { key: "prompt", label: "프롬프트" },
-  { key: "artifact", label: "연구 메모" },
-  { key: "sources", label: "출처" },
-  { key: "claims", label: "주장 검증" },
-  { key: "gaps", label: "공백/리스크" },
-];
-
-const VIEW_LABEL = {
-  prompt: "프롬프트",
-  artifact: "AI 응답",
-  sources: "출처",
-  claims: "주장 검증",
-  gaps: "공백/리스크",
-};
+const TERMINAL_STATES = new Set(["completed", "completed_markdown_only", "failed", "cancelled"]);
 
 const elements = {
   runForm: document.querySelector("#runForm"),
@@ -74,7 +60,9 @@ async function loadRuns() {
 async function loadRun(runId) {
   currentRunId = runId;
   currentRun = await apiJson(`/api/runs/${encodeURIComponent(runId)}`);
-  if (!currentRun.roles.some((role) => role.key === selectedRoleKey)) selectedRoleKey = "manager";
+  if (!currentRun.roles.some((role) => role.key === selectedRoleKey)) {
+    selectedRoleKey = currentRun.roles[0]?.key || "manager";
+  }
   ensureSelectedView();
   render();
   await loadVisibleFiles();
@@ -86,7 +74,7 @@ async function createRun(title, brief) {
   try {
     const run = await apiJson("/api/runs", {
       method: "POST",
-      body: JSON.stringify({ title, brief }),
+      body: JSON.stringify({ title, brief, mode: "quality-first" }),
     });
     selectedRoleKey = "manager";
     selectedView = "prompt";
@@ -99,7 +87,7 @@ async function createRun(title, brief) {
 
 function setRunButton(isRunning) {
   elements.runButton.disabled = isRunning;
-  elements.runButton.querySelector("span:last-child").textContent = isRunning ? "실행 중..." : "작업 실행";
+  elements.runButton.querySelector("span:last-child").textContent = isRunning ? "\uc2e4\ud589 \uc911..." : "\uc791\uc5c5 \uc2e4\ud589";
 }
 
 function render() {
@@ -107,14 +95,15 @@ function render() {
     renderEmpty();
     return;
   }
-
   const { task, status, roles } = currentRun;
   const selectedRole = findSelectedRole();
   const completed = completedRoleKeys(status);
   const usage = tokenUsageForRole(selectedRole);
+  const totalUsage = totalTokenUsage(status);
 
   elements.workspaceTitle.textContent = task.title;
-  elements.statusMessage.textContent = status.error ? "실패" : translateState(status.state);
+  elements.statusMessage.textContent = formatTokenUsage(totalUsage);
+  elements.statusMessage.title = formatTokenUsageDetail(totalUsage);
   elements.selectedRole.textContent = selectedRole.display_role || selectedRole.role;
   elements.selectedLabel.textContent = selectedRole.label;
   elements.selectedTokens.textContent = formatTokenUsage(usage);
@@ -126,22 +115,22 @@ function render() {
 }
 
 function renderEmpty() {
-  elements.workspaceTitle.textContent = "보고서 작업을 시작하세요";
-  elements.statusMessage.textContent = "대기";
+  elements.workspaceTitle.textContent = "\ubcf4\uace0\uc11c \uc791\uc5c5\uc744 \uc2dc\uc791\ud558\uc138\uc694";
+  elements.statusMessage.textContent = "\ud1a0\ud070 -";
+  elements.statusMessage.title = "";
   elements.stepList.innerHTML = "";
-  renderDetail("진행 단계에서 Agent를 선택하세요.");
-  elements.selectedTokens.textContent = "토큰 -";
+  renderDetail("\uc9c4\ud589 \ub2e8\uacc4\uc5d0\uc11c Agent\ub97c \uc120\ud0dd\ud558\uc138\uc694.");
+  elements.selectedTokens.textContent = "\ud1a0\ud070 -";
   elements.selectedTokens.title = "";
-  elements.selectedState.textContent = "대기";
+  elements.selectedState.textContent = "\ub300\uae30";
   renderSubtabs();
 }
 
 function renderRunList(runs) {
   if (!runs.length) {
-    elements.runList.innerHTML = `<p class="empty-note">저장된 작업이 없습니다.</p>`;
+    elements.runList.innerHTML = `<p class="empty-note">\uc800\uc7a5\ub41c \uc791\uc5c5\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.</p>`;
     return;
   }
-
   elements.runList.innerHTML = "";
   runs.forEach((run) => {
     const button = document.createElement("button");
@@ -149,7 +138,7 @@ function renderRunList(runs) {
     button.className = `run-item ${run.id === currentRunId ? "active" : ""}`;
     button.innerHTML = `
       <strong>${escapeHtml(run.task.title)}</strong>
-      <small>${run.id} · ${translateState(run.status.state)}</small>
+      <small>${escapeHtml(formatRunTime(run))}</small>
     `;
     button.addEventListener("click", () => loadRun(run.id));
     elements.runList.appendChild(button);
@@ -184,8 +173,7 @@ function renderSubtabs() {
   const selectedRole = currentRun ? findSelectedRole() : null;
   const views = viewsForRole(selectedRole);
   elements.subtabs.innerHTML = "";
-  elements.subtabs.style.setProperty("--tab-count", String(views.length));
-
+  elements.subtabs.style.setProperty("--tab-count", String(Math.max(views.length, 1)));
   views.forEach((view) => {
     const button = document.createElement("button");
     button.className = `subtab ${view.key === selectedView ? "active" : ""}`;
@@ -204,10 +192,11 @@ function renderSubtabs() {
 async function loadVisibleFiles() {
   if (!currentRun) return;
   const selectedRole = findSelectedRole();
-  const path = pathForView(selectedRole, selectedView);
+  const view = viewsForRole(selectedRole).find((item) => item.key === selectedView);
+  const path = view?.path || "";
   const detail = await readRunFile(path);
   const visibleDetail = selectedView === "prompt" ? summarizePromptInputs(detail) : detail;
-  renderDetail(visibleDetail || `${VIEW_LABEL[selectedView] || "파일"} 파일이 아직 생성되지 않았습니다.`);
+  renderDetail(visibleDetail || `${view?.label || "\ud30c\uc77c"} \ud30c\uc77c\uc774 \uc544\uc9c1 \uc0dd\uc131\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.`);
 }
 
 function renderDetail(markdown) {
@@ -233,13 +222,11 @@ function markdownToHtml(markdown) {
 
   for (const line of lines) {
     const trimmed = line.trim();
-
     if (!trimmed) {
       closeParagraph();
       closeList();
       continue;
     }
-
     const heading = /^(#{1,4})\s+(.+)$/.exec(trimmed);
     if (heading) {
       closeParagraph();
@@ -248,7 +235,6 @@ function markdownToHtml(markdown) {
       html.push(`<h${level}>${formatInline(heading[2])}</h${level}>`);
       continue;
     }
-
     const bullet = /^[-*]\s+(.+)$/.exec(trimmed);
     if (bullet) {
       closeParagraph();
@@ -259,10 +245,8 @@ function markdownToHtml(markdown) {
       html.push(`<li>${formatInline(bullet[1])}</li>`);
       continue;
     }
-
     paragraph.push(trimmed);
   }
-
   closeParagraph();
   closeList();
   return html.join("");
@@ -279,27 +263,21 @@ function summarizePromptInputs(promptText) {
   const lines = promptText.split(/\r?\n/);
   const output = [];
   let skipInputBody = false;
-
   for (const line of lines) {
     if (line.startsWith("# Input: artifacts/")) {
       output.push(line);
-      output.push("(이전 Agent 응답 본문은 화면 표시에서 생략했습니다.)");
+      output.push("(\uc774\uc804 Agent \uc0b0\ucd9c\ubb3c \ubcf8\ubb38\uc740 \ud654\uba74\uc5d0\uc11c \uc0dd\ub7b5\ud588\uc2b5\ub2c8\ub2e4. \ud574\ub2f9 Agent \ud0ed\uc5d0\uc11c \uc5f4\uc5b4\ubcf4\uc138\uc694.)");
       skipInputBody = true;
       continue;
     }
-
-    if (skipInputBody && isPromptSectionHeading(line)) {
-      skipInputBody = false;
-    }
-
+    if (skipInputBody && isPromptSectionHeading(line)) skipInputBody = false;
     if (!skipInputBody) output.push(line);
   }
-
   return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function isPromptSectionHeading(line) {
-  return /^# (Reference:|Final Report Instruction|Role Prompt|Run Context)/.test(line);
+  return /^# (Reference:|Publisher Instruction|Role Prompt|Run Context|Input:)/.test(line);
 }
 
 function readRunFile(path) {
@@ -309,15 +287,14 @@ function readRunFile(path) {
 
 function schedulePolling() {
   if (pollTimer) clearInterval(pollTimer);
-  if (!currentRun || ["completed", "failed"].includes(currentRun.status.state)) return;
-
+  if (!currentRun || TERMINAL_STATES.has(currentRun.status.state)) return;
   pollTimer = setInterval(async () => {
     if (!currentRunId) return;
     currentRun = await apiJson(`/api/runs/${encodeURIComponent(currentRunId)}`);
     ensureSelectedView();
     render();
     await loadVisibleFiles();
-    if (["completed", "failed"].includes(currentRun.status.state)) {
+    if (TERMINAL_STATES.has(currentRun.status.state)) {
       clearInterval(pollTimer);
       pollTimer = null;
       await loadRuns();
@@ -330,25 +307,20 @@ function findSelectedRole() {
 }
 
 function viewsForRole(role) {
-  return role?.key === "researcher" ? RESEARCH_VIEWS : BASE_VIEWS;
+  if (!role) return [];
+  return [
+    { key: "prompt", label: "\ud504\ub86c\ud504\ud2b8", path: role.prompt },
+    ...(role.artifacts || [{ label: role.label, path: role.artifact }]).map((artifact) => ({
+      key: artifact.path,
+      label: artifact.label,
+      path: artifact.path,
+    })),
+  ];
 }
 
 function ensureSelectedView() {
   const views = viewsForRole(currentRun ? findSelectedRole() : null);
-  if (!views.some((view) => view.key === selectedView)) {
-    selectedView = views[0].key;
-  }
-}
-
-function pathForView(role, view) {
-  if (view === "prompt") return role.prompt;
-  if (view === "artifact") return role.artifact;
-  const extra = role.extra_artifacts || [];
-  return {
-    sources: extra.find((path) => path.endsWith("01_sources.md")),
-    claims: extra.find((path) => path.endsWith("01_claims.md")),
-    gaps: extra.find((path) => path.endsWith("01_gaps.md")),
-  }[view] || "";
+  if (!views.some((view) => view.key === selectedView)) selectedView = views[0]?.key || "prompt";
 }
 
 function completedRoleKeys(status) {
@@ -361,10 +333,19 @@ function roleKeyFromArtifact(path) {
 }
 
 function tokenUsageForRole(role) {
-  const run = (currentRun?.status.agent_runs || []).find(
-    (item) => (item.key || roleKeyFromArtifact(item.artifact)) === role.key,
-  );
+  const run = (currentRun?.status.agent_runs || []).find((item) => (item.key || roleKeyFromArtifact(item.artifact)) === role.key);
   return run?.usage || null;
+}
+
+function totalTokenUsage(status) {
+  const total = {};
+  for (const run of status.agent_runs || []) {
+    const usage = run.usage || {};
+    for (const [key, value] of Object.entries(usage)) {
+      if (typeof value === "number" && Number.isFinite(value)) total[key] = (total[key] || 0) + value;
+    }
+  }
+  return Object.keys(total).length ? total : null;
 }
 
 function tokenTotal(usage) {
@@ -373,31 +354,55 @@ function tokenTotal(usage) {
 }
 
 function formatTokenUsage(usage) {
-  if (!usage) return "토큰 -";
-  return `토큰 ${formatNumber(tokenTotal(usage))} · 입력 ${formatNumber(usage.input_tokens)} · 출력 ${formatNumber(usage.output_tokens)}`;
+  if (!usage) return "\ud1a0\ud070 -";
+  return `\ud1a0\ud070 ${formatNumber(tokenTotal(usage))} \u00b7 \uc785\ub825 ${formatNumber(usage.input_tokens)} \u00b7 \ucd9c\ub825 ${formatNumber(usage.output_tokens)}`;
 }
 
 function formatTokenUsageDetail(usage) {
-  if (!usage) return "아직 토큰 사용량이 없습니다.";
+  if (!usage) return "\uc544\uc9c1 \ud1a0\ud070 \uc0ac\uc6a9\ub7c9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.";
   const parts = [
-    `총 ${formatNumber(tokenTotal(usage))}`,
-    `입력 ${formatNumber(usage.input_tokens)}`,
-    `출력 ${formatNumber(usage.output_tokens)}`,
+    `\ucd1d ${formatNumber(tokenTotal(usage))}`,
+    `\uc785\ub825 ${formatNumber(usage.input_tokens)}`,
+    `\ucd9c\ub825 ${formatNumber(usage.output_tokens)}`,
   ];
-  if (usage.cached_input_tokens) parts.push(`캐시 ${formatNumber(usage.cached_input_tokens)}`);
-  if (usage.reasoning_output_tokens) parts.push(`추론 ${formatNumber(usage.reasoning_output_tokens)}`);
-  return parts.join(" · ");
+  if (usage.cached_input_tokens) parts.push(`\uce90\uc2dc ${formatNumber(usage.cached_input_tokens)}`);
+  if (usage.reasoning_output_tokens) parts.push(`\ucd94\ub860 ${formatNumber(usage.reasoning_output_tokens)}`);
+  return parts.join(" \u00b7 ");
 }
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString("ko-KR");
 }
 
+function formatRunTime(run) {
+  const iso = run.task?.created_at || run.status?.created_at || "";
+  if (iso) return formatDateTime(iso);
+  const match = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/.exec(run.id || "");
+  if (!match) return run.id || "";
+  return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const parts = new Intl.DateTimeFormat("sv-SE", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second}`;
+}
+
 function roleStateLabel(role, status, completed) {
-  if (completed.has(role.key)) return "완료";
-  if (status.state === "failed" && isCurrentRole(role, status)) return "실패";
-  if (status.state === "running" && isCurrentRole(role, status)) return "진행 중";
-  return "대기";
+  if (completed.has(role.key)) return "\uc644\ub8cc";
+  if (status.state === "failed" && isCurrentRole(role, status)) return "\uc2e4\ud328";
+  if (["running", "needs_revision", "publishing"].includes(status.state) && isCurrentRole(role, status)) return translateState(status.state);
+  return "\ub300\uae30";
 }
 
 function isCurrentRole(role, status) {
@@ -406,14 +411,16 @@ function isCurrentRole(role, status) {
 
 function stateClass(state) {
   return {
-    완료: "done",
-    "진행 중": "active",
-    실패: "failed",
+    "\uc644\ub8cc": "done",
+    "\uc9c4\ud589 \uc911": "active",
+    "\uc218\uc815 \ud544\uc694": "active",
+    "\uac8c\uc2dc \uc911": "active",
+    "\uc2e4\ud328": "failed",
   }[state] || "";
 }
 
 function translateState(state) {
-  return STATUS[state] || "대기";
+  return STATUS[state] || "\ub300\uae30";
 }
 
 function escapeHtml(value) {
@@ -429,7 +436,7 @@ elements.runForm.addEventListener("submit", async (event) => {
   const title = elements.titleInput.value.trim();
   const brief = elements.briefInput.value.trim();
   if (!brief) {
-    elements.statusMessage.textContent = "보고서 내용을 입력해야 실행할 수 있습니다.";
+    elements.statusMessage.textContent = "\ubcf4\uace0\uc11c \ub0b4\uc6a9\uc744 \uc785\ub825\ud574\uc57c \uc2e4\ud589\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.";
     return;
   }
   try {
@@ -440,5 +447,5 @@ elements.runForm.addEventListener("submit", async (event) => {
 });
 
 loadRuns().catch((error) => {
-  elements.statusMessage.textContent = `서버 연결 실패: ${error.message}`;
+  elements.statusMessage.textContent = `\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328: ${error.message}`;
 });
