@@ -39,6 +39,7 @@ ROLES = [
         "prompt": "researcher.md",
         "prompt_file": "02_researcher.md",
         "artifact": "01_research.md",
+        "extra_artifacts": ["01_sources.md", "01_claims.md", "01_gaps.md"],
         "inputs": ["00_task_brief.md"],
         "goal": "Gather source-backed findings and uncertainty notes.",
     },
@@ -50,7 +51,7 @@ ROLES = [
         "prompt": "analyst.md",
         "prompt_file": "03_analyst.md",
         "artifact": "02_analysis.md",
-        "inputs": ["00_task_brief.md", "01_research.md"],
+        "inputs": ["00_task_brief.md", "01_research.md", "01_claims.md", "01_gaps.md"],
         "goal": "Turn the research into criteria, tradeoffs, risks, and recommendation.",
     },
     {
@@ -61,7 +62,7 @@ ROLES = [
         "prompt": "writer.md",
         "prompt_file": "04_writer.md",
         "artifact": "03_draft.md",
-        "inputs": ["00_task_brief.md", "01_research.md", "02_analysis.md"],
+        "inputs": ["00_task_brief.md", "01_research.md", "01_claims.md", "02_analysis.md"],
         "goal": "Draft a decision-ready report from the brief, research, and analysis.",
     },
     {
@@ -72,7 +73,7 @@ ROLES = [
         "prompt": "reviewer.md",
         "prompt_file": "05_reviewer.md",
         "artifact": "04_review.md",
-        "inputs": ["00_task_brief.md", "01_research.md", "02_analysis.md", "03_draft.md"],
+        "inputs": ["00_task_brief.md", "01_sources.md", "01_claims.md", "01_gaps.md", "02_analysis.md", "03_draft.md"],
         "extra_inputs": ["references/report-quality-rubric.md"],
         "goal": "Review the draft against the quality rubric and request targeted revisions if needed.",
     },
@@ -84,7 +85,7 @@ ROLES = [
         "prompt": "manager.md",
         "prompt_file": "06_final_manager.md",
         "artifact": "05_final.md",
-        "inputs": ["00_task_brief.md", "01_research.md", "02_analysis.md", "03_draft.md", "04_review.md"],
+        "inputs": ["00_task_brief.md", "01_research.md", "01_sources.md", "01_claims.md", "01_gaps.md", "02_analysis.md", "03_draft.md", "04_review.md"],
         "goal": "Create the final Markdown report. Do not create a DOCX file.",
     },
 ]
@@ -172,7 +173,7 @@ class ResearchTeamServer:
         target = _safe_child(self._run_dir(run_id), relative_path)
         if not target.is_file():
             raise FileNotFoundError(relative_path)
-        return target.read_text(encoding="utf-8", errors="replace")
+        return target.read_text(encoding="utf-8")
 
     def _run_workflow(self, run_id: str) -> None:
         run_dir = self._run_dir(run_id)
@@ -181,15 +182,15 @@ class ResearchTeamServer:
         try:
             for role in ROLES:
                 self._update_status(run_dir, state="running", current_role=role["key"])
-                self._run_role(run_dir, task, role)
-                self._append_agent_run(run_dir, role)
+                usage = self._run_role(run_dir, task, role)
+                self._append_agent_run(run_dir, role, usage)
             self._update_status(run_dir, state="completed", current_role="", error="")
         except Exception:
             detail = traceback.format_exc().strip()
             (run_dir / "error.log").write_text(detail, encoding="utf-8", errors="replace")
             self._update_status(run_dir, state="failed", error=detail)
 
-    def _run_role(self, run_dir: Path, task: dict[str, Any], role: dict[str, Any]) -> None:
+    def _run_role(self, run_dir: Path, task: dict[str, Any], role: dict[str, Any]) -> dict[str, int]:
         prompt = self._build_execution_prompt(role, task, run_dir)
         prompt_path = run_dir / "prompts" / role["prompt_file"]
         artifact_path = run_dir / "artifacts" / role["artifact"]
@@ -197,6 +198,7 @@ class ResearchTeamServer:
 
         prompt_path.write_text(prompt, encoding="utf-8")
         result = self._run_codex(prompt, run_dir, last_message_path)
+        usage = _extract_token_usage(result.stdout)
         reply = _strip_markdown_fence(_read_last_message(last_message_path))
 
         if result.returncode != 0:
@@ -207,7 +209,14 @@ class ResearchTeamServer:
         if not reply.strip():
             raise RuntimeError(f"{role['role']} returned an empty artifact")
 
-        artifact_path.write_text(reply, encoding="utf-8")
+        artifact_names = [role["artifact"], *role.get("extra_artifacts", [])]
+        if role.get("extra_artifacts"):
+            sections = _split_artifact_sections(reply, artifact_names)
+            for name, content in sections.items():
+                (run_dir / "artifacts" / name).write_text(content, encoding="utf-8")
+        else:
+            artifact_path.write_text(reply, encoding="utf-8")
+        return usage
 
     def _run_codex(self, prompt: str, cwd: Path, last_message_path: Path) -> subprocess.CompletedProcess[str]:
         command = [
@@ -220,6 +229,7 @@ class ResearchTeamServer:
             str(cwd),
             "--color",
             "never",
+            "--json",
             "--output-last-message",
             str(last_message_path),
         ]
@@ -258,10 +268,18 @@ class ResearchTeamServer:
             "- Do not wrap the answer in code fences.",
             "- Do not create DOCX files.",
             "- Do not edit local files; the server will save your final answer.",
-            "",
-            "# Role Prompt",
-            role_prompt,
         ]
+        if role.get("extra_artifacts"):
+            markers = [role["artifact"], *role["extra_artifacts"]]
+            context_parts.extend(
+                [
+                    "- This role must return multiple artifact sections in one Markdown response.",
+                    "- Start each artifact section with the exact marker shown below.",
+                    "- Do not omit, rename, translate, or wrap artifact markers in code fences.",
+                    *[f"  - <!-- artifact: {name} -->" for name in markers],
+                ]
+            )
+        context_parts.extend(["", "# Role Prompt", role_prompt])
 
         for artifact in role.get("inputs", []):
             context_parts.extend(["", f"# Input: artifacts/{artifact}", _read_optional(run_dir / "artifacts" / artifact)])
@@ -307,21 +325,24 @@ class ResearchTeamServer:
         status["updated_at"] = _now()
         _write_json(status_path, status)
 
-    def _append_agent_run(self, run_dir: Path, role: dict[str, Any]) -> None:
+    def _append_agent_run(self, run_dir: Path, role: dict[str, Any], usage: dict[str, int] | None = None) -> None:
         status_path = run_dir / "status.json"
         status = _read_json(status_path)
         status["completed_roles"] = [*status.get("completed_roles", []), role["key"]]
-        status.setdefault("agent_runs", []).append(
-            {
-                "key": role["key"],
-                "role": role["role"],
-                "label": role["label"],
-                "artifact": f"artifacts/{role['artifact']}",
-                "prompt": f"prompts/{role['prompt_file']}",
-                "status": "completed",
-                "completed_at": _now(),
-            }
-        )
+        entry: dict[str, Any] = {
+            "key": role["key"],
+            "role": role["role"],
+            "label": role["label"],
+            "artifact": f"artifacts/{role['artifact']}",
+            "prompt": f"prompts/{role['prompt_file']}",
+            "status": "completed",
+            "completed_at": _now(),
+        }
+        if role.get("extra_artifacts"):
+            entry["extra_artifacts"] = [f"artifacts/{name}" for name in role["extra_artifacts"]]
+        if usage:
+            entry["usage"] = usage
+        status.setdefault("agent_runs", []).append(entry)
         status["updated_at"] = _now()
         _write_json(status_path, status)
 
@@ -404,9 +425,10 @@ def make_handler(app: ResearchTeamServer) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def _public_roles() -> list[dict[str, str]]:
-    return [
-        {
+def _public_roles() -> list[dict[str, Any]]:
+    roles = []
+    for role in ROLES:
+        item: dict[str, Any] = {
             "key": role["key"],
             "role": role["role"],
             "display_role": role["display_role"],
@@ -414,8 +436,10 @@ def _public_roles() -> list[dict[str, str]]:
             "prompt": f"prompts/{role['prompt_file']}",
             "artifact": f"artifacts/{role['artifact']}",
         }
-        for role in ROLES
-    ]
+        if role.get("extra_artifacts"):
+            item["extra_artifacts"] = [f"artifacts/{name}" for name in role["extra_artifacts"]]
+        roles.append(item)
+    return roles
 
 
 def _resolve_codex_bin(value: str) -> str:
@@ -432,6 +456,8 @@ def _file_manifest(run_dir: Path) -> dict[str, bool]:
     for role in _public_roles():
         files[role["prompt"]] = (run_dir / role["prompt"]).is_file()
         files[role["artifact"]] = (run_dir / role["artifact"]).is_file()
+        for artifact in role.get("extra_artifacts", []):
+            files[artifact] = (run_dir / artifact).is_file()
     return files
 
 
@@ -452,12 +478,12 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _read_optional(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else "(not available yet)"
+    return path.read_text(encoding="utf-8") if path.exists() else "(not available yet)"
 
 
 def _read_last_message(path: Path) -> str:
     try:
-        text = path.read_text(encoding="utf-8", errors="replace").strip()
+        text = path.read_text(encoding="utf-8").strip()
     except OSError:
         return ""
     try:
@@ -472,6 +498,26 @@ def _compact_codex_output(result: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(text.splitlines()[-40:]).strip() if text else ""
 
 
+def _extract_token_usage(output: str) -> dict[str, int]:
+    usage: dict[str, int] = {}
+    for line in output.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        event_usage = event.get("usage") if event.get("type") == "turn.completed" else None
+        if not isinstance(event_usage, dict):
+            continue
+
+        usage = {
+            key: int(value)
+            for key, value in event_usage.items()
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        }
+    return usage
+
+
 def _strip_markdown_fence(response: str) -> str:
     text = response.strip()
     if text.startswith("```"):
@@ -484,14 +530,41 @@ def _strip_markdown_fence(response: str) -> str:
     return text
 
 
+def _split_artifact_sections(response: str, required_names: list[str]) -> dict[str, str]:
+    sections: dict[str, list[str]] = {}
+    current_name = ""
+
+    for line in response.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("<!-- artifact:") and stripped.endswith("-->"):
+            current_name = stripped.removeprefix("<!-- artifact:").removesuffix("-->").strip()
+            sections.setdefault(current_name, [])
+            continue
+        if current_name:
+            sections[current_name].append(line)
+
+    missing = [name for name in required_names if name not in sections]
+    if missing:
+        raise RuntimeError(f"required artifact section missing: {', '.join(missing)}")
+
+    parsed = {}
+    for name in required_names:
+        content = "\n".join(sections[name]).strip()
+        if not content:
+            raise RuntimeError(f"required artifact section empty: {name}")
+        parsed[name] = content + "\n"
+    return parsed
+
+
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def _utf8_environment() -> dict[str, str]:
     env = os.environ.copy()
-    env.setdefault("PYTHONUTF8", "1")
-    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONLEGACYWINDOWSSTDIO"] = "0"
     return env
 
 

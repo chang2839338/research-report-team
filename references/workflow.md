@@ -24,12 +24,12 @@
 
 4. Researcher Agent
    - Browse or inspect provided materials when current facts or citations matter.
-   - Keep source notes compact.
+   - Keep source notes compact and auditable.
    - Prefer primary or authoritative sources for high-stakes claims.
-   - Save or present the output as `01_research.md`.
+   - Save or present the output as `01_research.md`, `01_sources.md`, `01_claims.md`, and `01_gaps.md`.
 
 5. Auto-Save Checkpoint
-   - Write the Researcher artifact to `artifacts/01_research.md` when a workspace exists.
+   - Write the Researcher artifacts to `artifacts/01_research.md`, `artifacts/01_sources.md`, `artifacts/01_claims.md`, and `artifacts/01_gaps.md` when a workspace exists.
    - Show a short progress summary to the user.
    - Continue to Analyst without waiting for approval unless a blocking clarification is required.
 
@@ -37,7 +37,7 @@
    - Define criteria before comparing options.
    - Make tradeoffs explicit.
    - Separate recommendation from supporting evidence.
-   - Use `00_task_brief.md` and `01_research.md` as inputs.
+   - Use `00_task_brief.md`, `01_research.md`, `01_claims.md`, and `01_gaps.md` as inputs.
    - Save or present the output as `02_analysis.md`.
 
 7. Auto-Save Checkpoint
@@ -49,7 +49,7 @@
    - Use the user's requested format first.
    - If absent, use a decision brief.
    - Preserve citations, caveats, and assumptions.
-   - Use `00_task_brief.md`, `01_research.md`, and `02_analysis.md` as inputs.
+   - Use `00_task_brief.md`, `01_research.md`, `01_claims.md`, and `02_analysis.md` as inputs.
    - Save or present the output as `03_draft.md`.
 
 9. Auto-Save Checkpoint
@@ -61,7 +61,7 @@
    - Score against the quality rubric.
    - Request revision for material failures.
    - Limit revision requests to the smallest useful set.
-   - Use `00_task_brief.md`, `01_research.md`, `02_analysis.md`, `03_draft.md`, and the rubric as inputs.
+   - Use `00_task_brief.md`, `01_sources.md`, `01_claims.md`, `01_gaps.md`, `02_analysis.md`, `03_draft.md`, and the rubric as inputs.
    - Save or present the output as `04_review.md`.
 
 11. Revision Loop

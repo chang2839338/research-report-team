@@ -10,8 +10,8 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <span class="mark">R</span>
-          <h1>보고서 작업실</h1>
+          <span class="mark">?!</span>
+          <h1>보고서 작업</h1>
         </div>
 
         <form id="runForm" class="run-form">
@@ -22,7 +22,7 @@
 
           <label class="field">
             <span>보고서 내용</span>
-            <textarea id="briefInput" rows="10" placeholder="목표, 배경, 알고 싶은 점을 적어주세요."></textarea>
+            <textarea id="briefInput" rows="10" placeholder="목표, 배경, 독자, 원하는 산출물을 적어주세요."></textarea>
           </label>
 
           <button id="runButton" class="run-button" type="submit">
@@ -49,27 +49,19 @@
         </section>
 
         <section class="output-grid">
-          <article class="output-panel final-panel">
-            <div class="panel-head">
-              <p class="section-label">최종 보고서</p>
-              <span id="finalState" class="state-badge">대기</span>
-            </div>
-            <pre id="finalViewer" class="markdown-viewer">아직 최종 보고서가 없습니다.</pre>
-          </article>
-
           <article class="output-panel">
             <div class="panel-head">
               <div>
                 <p class="section-label" id="selectedRole">Manager</p>
                 <h3 id="selectedLabel">Task Brief</h3>
               </div>
-              <span id="selectedState" class="state-badge">대기</span>
+              <div class="panel-meta">
+                <span id="selectedTokens" class="token-badge">토큰 -</span>
+                <span id="selectedState" class="state-badge">대기</span>
+              </div>
             </div>
-            <div class="subtabs" role="tablist" aria-label="selected role files">
-              <button class="subtab active" type="button" data-view="prompt">prompt 발송</button>
-              <button class="subtab" type="button" data-view="artifact">AI 회신</button>
-            </div>
-            <pre id="detailViewer" class="markdown-viewer">진행 단계에서 Agent를 선택하세요.</pre>
+            <div id="subtabs" class="subtabs" role="tablist" aria-label="selected role files"></div>
+            <div id="detailViewer" class="markdown-viewer">진행 단계에서 Agent를 선택하세요.</div>
           </article>
         </section>
       </main>

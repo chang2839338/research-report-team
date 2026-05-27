@@ -26,6 +26,9 @@ ROLES = [
 ARTIFACT_TEMPLATES = {
     "00_task_brief.md": "# Task Brief\n\nTBD\n",
     "01_research.md": "# Research\n\nTBD\n",
+    "01_sources.md": "# Source Ledger\n\nTBD\n",
+    "01_claims.md": "# Claim Evidence Table\n\nTBD\n",
+    "01_gaps.md": "# Research Gaps And Risks\n\nTBD\n",
     "02_analysis.md": "# Analysis\n\nTBD\n",
     "03_draft.md": "# Draft\n\nTBD\n",
     "04_review.md": "# Review\n\nTBD\n",

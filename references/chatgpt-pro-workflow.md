@@ -109,7 +109,10 @@ python .\scripts\research_team_cli.py "your report request" --title "short title
 Then copy useful outputs into the generated files:
 
 - `artifacts/00_task_brief.md`: shared context packet and task contract.
-- `artifacts/01_research.md`: research findings.
+- `artifacts/01_research.md`: research memo.
+- `artifacts/01_sources.md`: source ledger.
+- `artifacts/01_claims.md`: claim evidence table.
+- `artifacts/01_gaps.md`: research gaps and risks.
 - `artifacts/02_analysis.md`: option comparison and recommendation logic.
 - `artifacts/03_draft.md`: report draft.
 - `artifacts/04_review.md`: Reviewer feedback.

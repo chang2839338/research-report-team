@@ -60,6 +60,9 @@ this minimum input package:
   "role_prompt": "The prompt for this role",
   "previous_artifacts": {
     "research": "artifacts/01_research.md; only for roles after Researcher",
+    "sources": "artifacts/01_sources.md; source ledger for Reviewer and final audit",
+    "claims": "artifacts/01_claims.md; claim evidence table for roles after Researcher",
+    "gaps": "artifacts/01_gaps.md; research gaps for roles after Researcher",
     "analysis": "artifacts/02_analysis.md; only for Writer and Reviewer",
     "draft": "artifacts/03_draft.md; only for Reviewer"
   },
@@ -107,7 +110,10 @@ Role boundaries:
 ## Artifact Files
 
 - `00_task_brief.md`: shared context packet and task contract for all roles.
-- `01_research.md`: source-backed findings and source notes.
+- `01_research.md`: human-readable research memo.
+- `01_sources.md`: source ledger with URLs, publishers, dates, credibility, relevance, and limitations.
+- `01_claims.md`: claim evidence table with verification status.
+- `01_gaps.md`: unsupported claims, evidence gaps, conflicts, and follow-up searches.
 - `02_analysis.md`: criteria, option comparison, risks, and recommendation.
 - `03_draft.md`: Writer's report draft.
 - `04_review.md`: Reviewer score and revision request.
@@ -133,6 +139,11 @@ role.
     {
       "role": "Researcher",
       "artifact": "artifacts/01_research.md",
+      "extra_artifacts": [
+        "artifacts/01_sources.md",
+        "artifacts/01_claims.md",
+        "artifacts/01_gaps.md"
+      ],
       "status": "completed",
       "summary": "Collected source-backed findings"
     }

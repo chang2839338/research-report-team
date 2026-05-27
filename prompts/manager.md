@@ -36,7 +36,7 @@ independent sub-agents instead of simulating all roles inside the Manager.
    user explicitly requires it.
 4. After each role finishes, show the user:
    - a short Manager summary,
-   - the role artifact,
+   - the role artifact or artifacts,
    - open questions or weak points,
    - the exact inputs planned for the next role.
 5. By default, continue automatically without waiting for user approval between
@@ -45,7 +45,7 @@ independent sub-agents instead of simulating all roles inside the Manager.
    unsupported report.
 6. Keep role artifacts aligned with the local workspace names:
    - Manager task brief: `00_task_brief.md`
-   - Researcher: `01_research.md`
+   - Researcher: `01_research.md`, `01_sources.md`, `01_claims.md`, `01_gaps.md`
    - Analyst: `02_analysis.md`
    - Writer: `03_draft.md`
    - Reviewer: `04_review.md`

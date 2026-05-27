@@ -1,13 +1,29 @@
 const STATUS = {
   queued: "대기",
-  running: "진행중",
+  running: "진행 중",
   completed: "완료",
   failed: "실패",
 };
 
+const BASE_VIEWS = [
+  { key: "prompt", label: "프롬프트" },
+  { key: "artifact", label: "AI 응답" },
+];
+
+const RESEARCH_VIEWS = [
+  { key: "prompt", label: "프롬프트" },
+  { key: "artifact", label: "연구 메모" },
+  { key: "sources", label: "출처" },
+  { key: "claims", label: "주장 검증" },
+  { key: "gaps", label: "공백/리스크" },
+];
+
 const VIEW_LABEL = {
-  prompt: "prompt 발송",
-  artifact: "AI 회신",
+  prompt: "프롬프트",
+  artifact: "AI 응답",
+  sources: "출처",
+  claims: "주장 검증",
+  gaps: "공백/리스크",
 };
 
 const elements = {
@@ -19,13 +35,12 @@ const elements = {
   workspaceTitle: document.querySelector("#workspaceTitle"),
   statusMessage: document.querySelector("#statusMessage"),
   stepList: document.querySelector("#stepList"),
-  finalState: document.querySelector("#finalState"),
-  finalViewer: document.querySelector("#finalViewer"),
   selectedRole: document.querySelector("#selectedRole"),
   selectedLabel: document.querySelector("#selectedLabel"),
+  selectedTokens: document.querySelector("#selectedTokens"),
   selectedState: document.querySelector("#selectedState"),
   detailViewer: document.querySelector("#detailViewer"),
-  subtabs: [...document.querySelectorAll(".subtab")],
+  subtabs: document.querySelector("#subtabs"),
 };
 
 let currentRun = null;
@@ -60,6 +75,7 @@ async function loadRun(runId) {
   currentRunId = runId;
   currentRun = await apiJson(`/api/runs/${encodeURIComponent(runId)}`);
   if (!currentRun.roles.some((role) => role.key === selectedRoleKey)) selectedRoleKey = "manager";
+  ensureSelectedView();
   render();
   await loadVisibleFiles();
   schedulePolling();
@@ -95,13 +111,15 @@ function render() {
   const { task, status, roles } = currentRun;
   const selectedRole = findSelectedRole();
   const completed = completedRoleKeys(status);
+  const usage = tokenUsageForRole(selectedRole);
 
   elements.workspaceTitle.textContent = task.title;
   elements.statusMessage.textContent = status.error ? "실패" : translateState(status.state);
   elements.selectedRole.textContent = selectedRole.display_role || selectedRole.role;
   elements.selectedLabel.textContent = selectedRole.label;
+  elements.selectedTokens.textContent = formatTokenUsage(usage);
+  elements.selectedTokens.title = formatTokenUsageDetail(usage);
   elements.selectedState.textContent = roleStateLabel(selectedRole, status, completed);
-  elements.finalState.textContent = currentRun.files["artifacts/05_final.md"] ? "완료" : "대기";
 
   renderSteps(roles, status, completed);
   renderSubtabs();
@@ -111,10 +129,11 @@ function renderEmpty() {
   elements.workspaceTitle.textContent = "보고서 작업을 시작하세요";
   elements.statusMessage.textContent = "대기";
   elements.stepList.innerHTML = "";
-  elements.detailViewer.textContent = "진행 단계에서 Agent를 선택하세요.";
-  elements.finalViewer.textContent = "아직 최종 보고서가 없습니다.";
+  renderDetail("진행 단계에서 Agent를 선택하세요.");
+  elements.selectedTokens.textContent = "토큰 -";
+  elements.selectedTokens.title = "";
   elements.selectedState.textContent = "대기";
-  elements.finalState.textContent = "대기";
+  renderSubtabs();
 }
 
 function renderRunList(runs) {
@@ -147,12 +166,13 @@ function renderSteps(roles, status, completed) {
     button.innerHTML = `
       <span class="step-number">${index + 1}</span>
       <span class="step-text">
-        <strong>${role.display_role || role.role}</strong>
+        <strong>${escapeHtml(role.display_role || role.role)}</strong>
         <small>${state}</small>
       </span>
     `;
     button.addEventListener("click", async () => {
       selectedRoleKey = role.key;
+      ensureSelectedView();
       render();
       await loadVisibleFiles();
     });
@@ -161,23 +181,97 @@ function renderSteps(roles, status, completed) {
 }
 
 function renderSubtabs() {
-  elements.subtabs.forEach((button) => {
-    button.classList.toggle("active", button.dataset.view === selectedView);
+  const selectedRole = currentRun ? findSelectedRole() : null;
+  const views = viewsForRole(selectedRole);
+  elements.subtabs.innerHTML = "";
+  elements.subtabs.style.setProperty("--tab-count", String(views.length));
+
+  views.forEach((view) => {
+    const button = document.createElement("button");
+    button.className = `subtab ${view.key === selectedView ? "active" : ""}`;
+    button.type = "button";
+    button.dataset.view = view.key;
+    button.textContent = view.label;
+    button.addEventListener("click", async () => {
+      selectedView = view.key;
+      renderSubtabs();
+      await loadVisibleFiles();
+    });
+    elements.subtabs.appendChild(button);
   });
 }
 
 async function loadVisibleFiles() {
   if (!currentRun) return;
   const selectedRole = findSelectedRole();
-  const path = selectedRole[selectedView];
-  const [detail, final] = await Promise.all([
-    readRunFile(path),
-    readRunFile("artifacts/05_final.md"),
-  ]);
-
+  const path = pathForView(selectedRole, selectedView);
+  const detail = await readRunFile(path);
   const visibleDetail = selectedView === "prompt" ? summarizePromptInputs(detail) : detail;
-  elements.detailViewer.textContent = visibleDetail || `${VIEW_LABEL[selectedView]} 파일이 아직 생성되지 않았습니다.`;
-  elements.finalViewer.textContent = final || "아직 최종 보고서가 없습니다.";
+  renderDetail(visibleDetail || `${VIEW_LABEL[selectedView] || "파일"} 파일이 아직 생성되지 않았습니다.`);
+}
+
+function renderDetail(markdown) {
+  elements.detailViewer.innerHTML = markdownToHtml(markdown);
+}
+
+function markdownToHtml(markdown) {
+  const lines = String(markdown || "").split(/\r?\n/);
+  const html = [];
+  let paragraph = [];
+  let listOpen = false;
+
+  const closeParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${formatInline(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const closeList = () => {
+    if (!listOpen) return;
+    html.push("</ul>");
+    listOpen = false;
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      closeParagraph();
+      closeList();
+      continue;
+    }
+
+    const heading = /^(#{1,4})\s+(.+)$/.exec(trimmed);
+    if (heading) {
+      closeParagraph();
+      closeList();
+      const level = Math.min(heading[1].length + 2, 6);
+      html.push(`<h${level}>${formatInline(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    const bullet = /^[-*]\s+(.+)$/.exec(trimmed);
+    if (bullet) {
+      closeParagraph();
+      if (!listOpen) {
+        html.push("<ul>");
+        listOpen = true;
+      }
+      html.push(`<li>${formatInline(bullet[1])}</li>`);
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  closeParagraph();
+  closeList();
+  return html.join("");
+}
+
+function formatInline(value) {
+  return escapeHtml(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 }
 
 function summarizePromptInputs(promptText) {
@@ -189,7 +283,7 @@ function summarizePromptInputs(promptText) {
   for (const line of lines) {
     if (line.startsWith("# Input: artifacts/")) {
       output.push(line);
-      output.push("(이전 Agent 회신 본문은 화면 표시에서 생략했습니다.)");
+      output.push("(이전 Agent 응답 본문은 화면 표시에서 생략했습니다.)");
       skipInputBody = true;
       continue;
     }
@@ -220,6 +314,7 @@ function schedulePolling() {
   pollTimer = setInterval(async () => {
     if (!currentRunId) return;
     currentRun = await apiJson(`/api/runs/${encodeURIComponent(currentRunId)}`);
+    ensureSelectedView();
     render();
     await loadVisibleFiles();
     if (["completed", "failed"].includes(currentRun.status.state)) {
@@ -234,6 +329,28 @@ function findSelectedRole() {
   return currentRun.roles.find((role) => role.key === selectedRoleKey) || currentRun.roles[0];
 }
 
+function viewsForRole(role) {
+  return role?.key === "researcher" ? RESEARCH_VIEWS : BASE_VIEWS;
+}
+
+function ensureSelectedView() {
+  const views = viewsForRole(currentRun ? findSelectedRole() : null);
+  if (!views.some((view) => view.key === selectedView)) {
+    selectedView = views[0].key;
+  }
+}
+
+function pathForView(role, view) {
+  if (view === "prompt") return role.prompt;
+  if (view === "artifact") return role.artifact;
+  const extra = role.extra_artifacts || [];
+  return {
+    sources: extra.find((path) => path.endsWith("01_sources.md")),
+    claims: extra.find((path) => path.endsWith("01_claims.md")),
+    gaps: extra.find((path) => path.endsWith("01_gaps.md")),
+  }[view] || "";
+}
+
 function completedRoleKeys(status) {
   return new Set((status.agent_runs || []).map((run) => run.key || roleKeyFromArtifact(run.artifact)));
 }
@@ -243,10 +360,43 @@ function roleKeyFromArtifact(path) {
   return role?.key || "";
 }
 
+function tokenUsageForRole(role) {
+  const run = (currentRun?.status.agent_runs || []).find(
+    (item) => (item.key || roleKeyFromArtifact(item.artifact)) === role.key,
+  );
+  return run?.usage || null;
+}
+
+function tokenTotal(usage) {
+  if (!usage) return 0;
+  return Number(usage.input_tokens || 0) + Number(usage.output_tokens || 0);
+}
+
+function formatTokenUsage(usage) {
+  if (!usage) return "토큰 -";
+  return `토큰 ${formatNumber(tokenTotal(usage))} · 입력 ${formatNumber(usage.input_tokens)} · 출력 ${formatNumber(usage.output_tokens)}`;
+}
+
+function formatTokenUsageDetail(usage) {
+  if (!usage) return "아직 토큰 사용량이 없습니다.";
+  const parts = [
+    `총 ${formatNumber(tokenTotal(usage))}`,
+    `입력 ${formatNumber(usage.input_tokens)}`,
+    `출력 ${formatNumber(usage.output_tokens)}`,
+  ];
+  if (usage.cached_input_tokens) parts.push(`캐시 ${formatNumber(usage.cached_input_tokens)}`);
+  if (usage.reasoning_output_tokens) parts.push(`추론 ${formatNumber(usage.reasoning_output_tokens)}`);
+  return parts.join(" · ");
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("ko-KR");
+}
+
 function roleStateLabel(role, status, completed) {
   if (completed.has(role.key)) return "완료";
   if (status.state === "failed" && isCurrentRole(role, status)) return "실패";
-  if (status.state === "running" && isCurrentRole(role, status)) return "진행중";
+  if (status.state === "running" && isCurrentRole(role, status)) return "진행 중";
   return "대기";
 }
 
@@ -257,7 +407,7 @@ function isCurrentRole(role, status) {
 function stateClass(state) {
   return {
     완료: "done",
-    진행중: "active",
+    "진행 중": "active",
     실패: "failed",
   }[state] || "";
 }
@@ -287,14 +437,6 @@ elements.runForm.addEventListener("submit", async (event) => {
   } catch (error) {
     elements.statusMessage.textContent = error.message;
   }
-});
-
-elements.subtabs.forEach((button) => {
-  button.addEventListener("click", async () => {
-    selectedView = button.dataset.view;
-    renderSubtabs();
-    await loadVisibleFiles();
-  });
 });
 
 loadRuns().catch((error) => {

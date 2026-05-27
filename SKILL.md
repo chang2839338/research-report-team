@@ -25,12 +25,13 @@ Temporary specialist roles may be added for domain-specific work, such as Market
 3. Create a small work plan. Prefer 3-6 tasks for normal reports. Assign each task to one core role or a temporary specialist.
 4. Run research before analysis. Use web browsing when the user asks for current information, market facts, regulations, company/product details, citations, or source-backed claims.
 5. Require source traceability for factual claims. Keep URLs, publication dates when available, and short notes on why each source matters.
-6. Have the Analyst synthesize evidence into decision criteria, options, tradeoffs, risks, and recommendation.
-7. Have the Writer produce the requested deliverable using the appropriate template from `references/output-templates.md` when helpful.
-8. Have the Reviewer score the draft against `references/report-quality-rubric.md`.
-9. If the draft fails material criteria, issue a targeted revision request and revise before final delivery.
-10. After the Reviewer approves or conditionally approves revisions, create the Manager final report as Markdown and also generate a Word `.docx` version of the final report when a local workspace is available. Store the Word file next to the final Markdown artifact, typically as `artifacts/05_final.docx`.
-11. Deliver the final answer with a concise executive summary, recommendation, key evidence, caveats, next actions, and the path to the Word file unless the user requested another format.
+6. When the local Codex web workflow is used, the Researcher produces `01_research.md`, `01_sources.md`, `01_claims.md`, and `01_gaps.md` so downstream roles can audit sources and claim status.
+7. Have the Analyst synthesize evidence into decision criteria, options, tradeoffs, risks, and recommendation.
+8. Have the Writer produce the requested deliverable using the appropriate template from `references/output-templates.md` when helpful.
+9. Have the Reviewer score the draft against `references/report-quality-rubric.md`.
+10. If the draft fails material criteria, issue a targeted revision request and revise before final delivery.
+11. After the Reviewer approves or conditionally approves revisions, create the Manager final report as Markdown and also generate a Word `.docx` version of the final report when a local workspace is available. Store the Word file next to the final Markdown artifact, typically as `artifacts/05_final.docx`.
+12. Deliver the final answer with a concise executive summary, recommendation, key evidence, caveats, next actions, and the path to the Word file unless the user requested another format.
 
 ## Question Policy
 
@@ -78,9 +79,9 @@ have not yet been captured in the task brief.
 
 Default role inputs:
 - Researcher: `00_task_brief.md` and `prompts/researcher.md`.
-- Analyst: `00_task_brief.md`, `01_research.md`, and `prompts/analyst.md`.
-- Writer: `00_task_brief.md`, `01_research.md`, `02_analysis.md`, and `prompts/writer.md`.
-- Reviewer: `00_task_brief.md`, `01_research.md`, `02_analysis.md`, `03_draft.md`, `prompts/reviewer.md`, and `references/report-quality-rubric.md`.
+- Analyst: `00_task_brief.md`, `01_research.md`, `01_claims.md`, `01_gaps.md`, and `prompts/analyst.md`.
+- Writer: `00_task_brief.md`, `01_research.md`, `01_claims.md`, `02_analysis.md`, and `prompts/writer.md`.
+- Reviewer: `00_task_brief.md`, `01_sources.md`, `01_claims.md`, `01_gaps.md`, `02_analysis.md`, `03_draft.md`, `prompts/reviewer.md`, and `references/report-quality-rubric.md`.
 
 ## Word Output
 
@@ -115,4 +116,3 @@ Read these references only when needed:
 - `references/quality-checklist.md` for final report approval checks.
 - `references/deferred-automation-criteria.md` for deciding when API, agent runner, or web app work is justified.
 - `prompts/` for numbered role-specific prompt files when role behavior needs to be explicit or reusable, using `01_manager.md`, `02_researcher.md`, `03_analyst.md`, `04_writer.md`, and `05_reviewer.md` order.
-- `examples/` for sample decision briefs, research memos, and reviewer feedback.
