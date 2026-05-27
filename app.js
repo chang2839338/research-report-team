@@ -3,7 +3,10 @@ const STATUS = {
   running: "\uc9c4\ud589 \uc911",
   needs_revision: "\uc218\uc815 \ud544\uc694",
   publishing: "\uac8c\uc2dc \uc911",
+  remediating: "\ubcf4\uac15 \uc911",
+  continuing_with_issues: "\uc774\uc288 \uc548\uace0 \uc9c4\ud589",
   completed: "\uc644\ub8cc",
+  completed_with_unresolved_issues: "\uc870\uac74\ubd80 \uc644\ub8cc",
   completed_markdown_only: "Markdown \uc644\ub8cc",
   failed: "\uc2e4\ud328",
   blocked: "\ucc28\ub2e8",
@@ -12,7 +15,7 @@ const STATUS = {
   needs_clarification: "\ud655\uc778 \ud544\uc694",
 };
 
-const TERMINAL_STATES = new Set(["completed", "completed_markdown_only", "failed", "blocked", "cancelled", "needs_clarification"]);
+const TERMINAL_STATES = new Set(["completed", "completed_with_unresolved_issues", "completed_markdown_only", "failed", "blocked", "cancelled", "needs_clarification"]);
 
 const elements = {
   runForm: document.querySelector("#runForm"),
@@ -150,15 +153,19 @@ function render() {
   const totalUsage = totalTokenUsage(status);
   const roleDuration = durationForRole(selectedRole, status, completed);
   const totalDuration = durationForRun(task, status);
+  const runStatus = formatRunStatus(status, totalUsage, totalDuration);
+  const selectedState = roleStateLabel(selectedRole, status, completed);
 
   elements.workspaceTitle.textContent = task.title;
-  elements.statusMessage.textContent = formatUsageAndDuration(totalUsage, totalDuration);
-  elements.statusMessage.title = formatTokenUsageDetail(totalUsage);
+  elements.statusMessage.textContent = runStatus.text;
+  elements.statusMessage.title = runStatus.title;
+  elements.statusMessage.dataset.state = status.state || "";
   elements.selectedRole.textContent = formatRoleHeading(selectedRole);
   elements.selectedLabel.textContent = selectedRole.label;
   elements.selectedTokens.textContent = formatUsageAndDuration(usage, roleDuration);
   elements.selectedTokens.title = formatTokenUsageDetail(usage);
-  elements.selectedState.textContent = roleStateLabel(selectedRole, status, completed);
+  elements.selectedState.textContent = selectedState;
+  elements.selectedState.dataset.state = stateClass(selectedState);
 
   renderSteps(roles, status, completed);
   renderSubtabs();
@@ -168,11 +175,13 @@ function renderEmpty() {
   elements.workspaceTitle.textContent = "\ubcf4\uace0\uc11c \uc791\uc5c5\uc744 \uc2dc\uc791\ud558\uc138\uc694";
   elements.statusMessage.textContent = "\ud1a0\ud070 - \u00b7 \uc18c\uc694\uc2dc\uac04 -";
   elements.statusMessage.title = "";
+  delete elements.statusMessage.dataset.state;
   elements.stepList.innerHTML = "";
   renderDetail("\uc9c4\ud589 \ub2e8\uacc4\uc5d0\uc11c Agent\ub97c \uc120\ud0dd\ud558\uc138\uc694.");
   elements.selectedTokens.textContent = "\ud1a0\ud070 - \u00b7 \uc18c\uc694\uc2dc\uac04 -";
   elements.selectedTokens.title = "";
   elements.selectedState.textContent = "\ub300\uae30";
+  delete elements.selectedState.dataset.state;
   renderSubtabs();
 }
 
@@ -400,19 +409,26 @@ function roleKeyFromArtifact(path) {
 }
 
 function tokenUsageForRole(role) {
-  const run = (currentRun?.status.agent_runs || []).find((item) => (item.key || roleKeyFromArtifact(item.artifact)) === role.key);
-  return run?.usage || null;
+  return sumTokenUsage(roleRunsForRole(role).map((run) => run.usage));
 }
 
 function agentRunForRole(role) {
-  return (currentRun?.status.agent_runs || []).find((item) => (item.key || roleKeyFromArtifact(item.artifact)) === role.key) || null;
+  const runs = roleRunsForRole(role);
+  return runs[runs.length - 1] || null;
+}
+
+function roleRunsForRole(role) {
+  return (currentRun?.status.agent_runs || []).filter((item) => (item.key || roleKeyFromArtifact(item.artifact)) === role.key);
 }
 
 function totalTokenUsage(status) {
+  return sumTokenUsage((status.agent_runs || []).map((run) => run.usage));
+}
+
+function sumTokenUsage(usages) {
   const total = {};
-  for (const run of status.agent_runs || []) {
-    const usage = run.usage || {};
-    for (const [key, value] of Object.entries(usage)) {
+  for (const usage of usages || []) {
+    for (const [key, value] of Object.entries(usage || {})) {
       if (typeof value === "number" && Number.isFinite(value)) total[key] = (total[key] || 0) + value;
     }
   }
@@ -431,6 +447,46 @@ function formatTokenUsage(usage) {
 
 function formatUsageAndDuration(usage, durationMs) {
   return `${formatTokenUsage(usage)} \u00b7 ${formatDuration(durationMs)}`;
+}
+
+function formatRunStatus(status, usage, durationMs) {
+  const usageText = formatUsageAndDuration(usage, durationMs);
+  const state = status?.state || "";
+  const title = [status?.error || "", formatTokenUsageDetail(usage)].filter(Boolean).join("\n");
+  if (state === "completed_with_unresolved_issues") {
+    const count = (status.unresolved_gate_issues || []).length;
+    return { text: `\uc870\uac74\ubd80 \uc644\ub8cc: \ubbf8\ud574\uacb0 \uac80\uc99d \uc774\uc288 ${formatNumber(count)}\uac74 \u00b7 ${usageText}`, title };
+  }
+  if (["remediating", "continuing_with_issues"].includes(state)) {
+    return { text: `${translateState(state)} \u00b7 ${usageText}`, title };
+  }
+  if (["blocked", "failed", "cancelled", "needs_clarification"].includes(state)) {
+    const reason = formatStopReason(status);
+    return {
+      text: reason ? `${translateState(state)}: ${reason} \u00b7 ${usageText}` : `${translateState(state)} \u00b7 ${usageText}`,
+      title,
+    };
+  }
+  if (["running", "publishing"].includes(state)) {
+    return { text: `${translateState(state)} \u00b7 ${usageText}`, title };
+  }
+  return { text: usageText, title };
+}
+
+function formatStopReason(status) {
+  const error = String(status?.error || "").split(/\r?\n/)[0].trim();
+  let match = /^Evidence gate stopped workflow: (.+)$/.exec(error);
+  if (match) return `Evidence Gate ${match[1]}`;
+  match = /^Analysis gate stopped workflow: (.+)$/.exec(error);
+  if (match) return `Analysis Gate ${match[1]}`;
+  if (error === "Final Verifier blocked publication.") return "Final Verifier blocked";
+  if (error === "Manager requested clarification before research.") return "Manager \ud655\uc778 \ud544\uc694";
+  return truncateText(error, 96);
+}
+
+function truncateText(value, maxLength) {
+  if (!value || value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1)}\u2026`;
 }
 
 function formatTokenUsageDetail(usage) {
@@ -460,18 +516,45 @@ function descriptionForView(view) {
 }
 
 function durationForRole(role, status, completed) {
-  const run = agentRunForRole(role);
-  if (run?.started_at && run?.completed_at) return durationBetween(run.started_at, run.completed_at);
-  if (isCurrentRole(role, status) && status.current_role_started_at) return durationBetween(status.current_role_started_at, new Date().toISOString());
-  if (completed.has(role.key) && run?.completed_at) return 0;
+  let total = 0;
+  let hasDuration = false;
+  for (const run of roleRunsForRole(role)) {
+    const duration = durationBetween(run.started_at, run.completed_at);
+    if (duration !== null) {
+      total += duration;
+      hasDuration = true;
+    }
+  }
+  if (isCurrentRole(role, status) && status.current_role_started_at) {
+    const current = durationBetween(status.current_role_started_at, new Date().toISOString());
+    if (current !== null) {
+      total += current;
+      hasDuration = true;
+    }
+  }
+  if (hasDuration) return total;
+  if (completed.has(role.key)) return 0;
   return null;
 }
 
 function durationForRun(task, status) {
-  const start = task?.created_at || status?.created_at;
-  if (!start) return null;
-  const end = TERMINAL_STATES.has(status.state) ? status.updated_at : new Date().toISOString();
-  return durationBetween(start, end);
+  let total = 0;
+  let hasDuration = false;
+  for (const run of status.agent_runs || []) {
+    const duration = durationBetween(run.started_at, run.completed_at);
+    if (duration !== null) {
+      total += duration;
+      hasDuration = true;
+    }
+  }
+  if (!TERMINAL_STATES.has(status.state) && status.current_role_started_at) {
+    const current = durationBetween(status.current_role_started_at, new Date().toISOString());
+    if (current !== null) {
+      total += current;
+      hasDuration = true;
+    }
+  }
+  return hasDuration ? total : null;
 }
 
 function durationBetween(startValue, endValue) {
@@ -514,11 +597,40 @@ function formatDateTime(value) {
 }
 
 function roleStateLabel(role, status, completed) {
+  if (status.state === "remediating" && isCurrentRole(role, status)) return "\ubcf4\uac15 \uc911";
+  if (status.state === "continuing_with_issues" && isCurrentRole(role, status)) return "\uc774\uc288 \uc548\uace0 \uc9c4\ud589";
+  if (status.state === "completed_with_unresolved_issues" && role.key === "publisher" && completed.has(role.key)) return "\uc870\uac74\ubd80 \uc644\ub8cc";
+  if (roleHasUnresolvedIssue(role, status)) return "\uc774\uc288 \uc548\uace0 \uc9c4\ud589";
+  const terminalState = terminalStateForRole(role, status);
+  if (terminalState) return terminalState;
   if (completed.has(role.key)) return "\uc644\ub8cc";
   if (role.key === "revision_writer" && status.revision_status?.status === "not_required") return "\uc218\uc815 \ubd88\ud544\uc694";
   if (status.state === "failed" && isCurrentRole(role, status)) return "\uc2e4\ud328";
   if (["running", "needs_revision", "publishing", "blocked", "needs_clarification"].includes(status.state) && isCurrentRole(role, status)) return translateState(status.state);
   return "\ub300\uae30";
+}
+
+function roleHasUnresolvedIssue(role, status) {
+  return (status.unresolved_gate_issues || []).some((issue) => issue.source_role === role.key);
+}
+
+function terminalStateForRole(role, status) {
+  if (!role || !status) return "";
+  if (status.state === "failed" && (isCurrentRole(role, status) || status.failed_role === role.key)) return "\uc2e4\ud328";
+  if (status.state === "blocked" && role.key === stoppedRoleKey(status)) return "\ucc28\ub2e8";
+  if (status.state === "needs_clarification" && role.key === "manager") return "\ud655\uc778 \ud544\uc694";
+  return "";
+}
+
+function stoppedRoleKey(status) {
+  const error = status?.error || "";
+  if (error.startsWith("Evidence gate stopped workflow")) return "evidence_auditor";
+  if (error.startsWith("Analysis gate stopped workflow")) return "analyst";
+  if (error === "Final Verifier blocked publication.") return "final_verifier";
+  if (["blocked", "incomplete"].includes(status.evidence_gate?.decision)) return "evidence_auditor";
+  if (["blocked", "needs_research"].includes(status.analysis_gate?.decision)) return "analyst";
+  if (status.final_gate?.decision === "blocked" || status.final_gate?.block_publish === true) return "final_verifier";
+  return status.failed_role || status.current_role || "";
 }
 
 function isCurrentRole(role, status) {
@@ -531,6 +643,9 @@ function stateClass(state) {
     "\uc9c4\ud589 \uc911": "active",
     "\uc218\uc815 \ud544\uc694": "active",
     "\uac8c\uc2dc \uc911": "active",
+    "\ubcf4\uac15 \uc911": "active",
+    "\uc774\uc288 \uc548\uace0 \uc9c4\ud589": "warning",
+    "\uc870\uac74\ubd80 \uc644\ub8cc": "warning",
     "\uc218\uc815 \ubd88\ud544\uc694": "done",
     "\uc2e4\ud328": "failed",
     "\ucc28\ub2e8": "failed",

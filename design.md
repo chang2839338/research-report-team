@@ -25,7 +25,7 @@ The app is a quiet operations console for Codex-based report production. It keep
 
 - Clicking a progress step selects that Agent.
 - Running jobs update automatically by polling the run API.
-- Terminal states include completed, blocked, failed, cancelled, and needs clarification.
+- Runtime states include running, remediating, continuing with issues, publishing, completed, completed with unresolved issues, blocked, failed, cancelled, and needs clarification.
 - Previous artifact inputs are hidden in prompt view and can be opened from their own Agent tabs.
 
 ## Storage Rules

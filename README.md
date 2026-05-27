@@ -59,6 +59,21 @@ Multi-artifact Codex roles return one Markdown response with exact artifact
 markers. The server validates marker presence/order and JSON sidecars. If marker
 parsing fails, the server asks Codex for one repair attempt before failing.
 
+## Recovery Loop
+
+Quality gates are recoverable. Evidence, analysis, review, and final verification
+failures trigger targeted remediation of the prior role and then re-run the gate,
+up to two attempts per gate. Remediation prompts include the previous artifacts and
+the failed gate payload, and instruct the role to preserve valid content while
+filling only the missing or unsafe parts.
+
+If a gate still does not pass after two remediation attempts, the workflow records
+the unresolved issue in `status.json` under `unresolved_gate_issues` and continues.
+Downstream roles receive those issues as carry-forward context and must expose the
+limitations in analysis, caveats, trace notes, review, final verification, and the
+published report. Publisher writes `publication_status: completed_with_unresolved_issues`
+in the final manifest when this happens.
+
 ## Workflow Notes
 
 1. Enter a report title and brief.
@@ -68,6 +83,7 @@ parsing fails, the server asks Codex for one repair attempt before failing.
 5. Prompts are saved in `prompts/`.
 6. Agent replies are saved in `artifacts/`.
 7. Token usage and role history are saved in `status.json`.
-8. Final state is `completed` only when Markdown, DOCX, and final manifest exist.
+8. Final state is `completed` only when Markdown, DOCX, and final manifest exist without unresolved gate issues.
+9. Final state is `completed_with_unresolved_issues` when the report is published conditionally after exhausted remediation.
 
 Existing historical runs are preserved as-is; new runs use this quality-first contract.

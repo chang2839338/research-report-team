@@ -216,6 +216,12 @@ def initial_status(run_id: str, created_at: str) -> dict[str, Any]:
         "auto_progress": True,
         "agent_runs": [],
         "artifacts": {},
+        "loop_state": {
+            "max_attempts_per_gate": 2,
+            "retry_counts": {},
+            "iterations": [],
+        },
+        "unresolved_gate_issues": [],
         "task_contract": {},
         "evidence_gate": {"decision": "not_started"},
         "analysis_gate": {"decision": "not_started"},

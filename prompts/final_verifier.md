@@ -21,6 +21,7 @@ Boundary: Reviewer audits the draft. Revision Writer patches required items. Fin
 3. Check that no new unsupported or untraceable material claim appears in the candidate.
 4. Check that Evidence Auditor caveats/exclusions remain respected.
 5. Decide whether the deterministic Publisher can copy the candidate to `08_final.md`.
+6. If `Carry-Forward Gate Issues` are present, verify that the candidate visibly discloses them and put them in `carry_forward_caveats` or blocker lists as appropriate.
 
 ## Non-Goals
 
@@ -52,7 +53,7 @@ Return valid JSON only:
 
 Allowed `decision` values: `ready`, `caveated`, `blocked`.
 
-Use `blocked` or `block_publish: true` when publication would mislead the reader, contradict the evidence gate, or ignore required revisions.
+Use `blocked` or `block_publish: true` when publication would mislead the reader, contradict the evidence gate, or ignore required revisions. The workflow may still publish conditionally after remediation attempts are exhausted; in that case your blocker lists must be explicit enough for Publisher to carry the limitation forward.
 
 <!-- artifact: 07_final_verification.md -->
 

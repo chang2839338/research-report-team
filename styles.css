@@ -273,6 +273,27 @@ textarea {
   white-space: nowrap;
 }
 
+#statusMessage[data-state="blocked"],
+#statusMessage[data-state="failed"] {
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--line));
+  background: #fff8f4;
+  color: var(--warning);
+}
+
+#statusMessage[data-state="needs_clarification"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+#statusMessage[data-state="remediating"],
+#statusMessage[data-state="continuing_with_issues"],
+#statusMessage[data-state="completed_with_unresolved_issues"] {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--line));
+  background: #fff8f4;
+  color: var(--warning);
+}
+
 .progress-panel,
 .output-panel {
   border: 1px solid var(--line);
@@ -320,6 +341,11 @@ textarea {
 .step-item.failed {
   border-color: var(--warning);
   color: var(--warning);
+}
+
+.step-item.warning {
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--line));
+  background: #fff8f4;
 }
 
 .step-number {
@@ -388,6 +414,30 @@ textarea {
   font-size: 12px;
   font-weight: 650;
   text-align: center;
+}
+
+.state-badge[data-state="done"] {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.state-badge[data-state="active"] {
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--line));
+  background: #fff8f4;
+  color: var(--warning);
+}
+
+.state-badge[data-state="failed"] {
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--line));
+  background: #fff8f4;
+  color: var(--warning);
+}
+
+.state-badge[data-state="warning"] {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--line));
+  background: #fff8f4;
+  color: var(--warning);
 }
 
 .panel-meta {

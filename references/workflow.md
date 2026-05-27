@@ -12,11 +12,13 @@
 
 3. Evidence Auditor
    - Produces the authoritative admissibility gate.
-   - Blocks before analysis when evidence is incomplete or unsafe.
+   - Triggers targeted Researcher remediation when evidence is incomplete or unsafe.
+   - After two failed remediation attempts, records unresolved evidence issues and continues with caveats.
 
 4. Analyst
    - Builds the decision frame, option evaluation, scenarios, recommendation, and rollup.
-   - Blocks when audited evidence is insufficient for analysis.
+   - Triggers Researcher/Evidence remediation when audited evidence is insufficient for analysis.
+   - After two failed remediation attempts, records unresolved analysis issues and continues with caveats.
 
 5. Writer
    - Writes the reader-facing draft and internal writer trace.
@@ -24,6 +26,7 @@
 6. Reviewer
    - Audits the draft and emits a structured review decision.
    - Uses `approved`, `targeted_revision`, or `needs_revision`.
+   - Required revisions trigger Revision Writer and Reviewer retry up to two times.
 
 7. Revision Writer
    - Runs only when the structured review decision requires it.
@@ -31,7 +34,8 @@
 
 8. Final Verifier
    - Emits the final publication gate.
-   - Blocks publication when required revisions or evidence caveats are unresolved.
+   - Triggers Revision Writer and final verification retry when required revisions or evidence caveats are unresolved.
+   - After two failed remediation attempts, records unresolved final issues and allows conditional publication.
 
 9. Publisher/system
    - Does not call Codex.
@@ -39,8 +43,9 @@
 
 ## State Rules
 
-- Use `queued`, `running`, `publishing`, `completed`, `completed_markdown_only`, `blocked`, `needs_clarification`, `failed`, or `cancelled`.
+- Use `queued`, `running`, `remediating`, `continuing_with_issues`, `publishing`, `completed`, `completed_with_unresolved_issues`, `completed_markdown_only`, `blocked`, `needs_clarification`, `failed`, or `cancelled`.
 - Keep `evidence_gate`, `analysis_gate`, `review_gate`, `revision_status`, and `final_gate` separate in `status.json`.
+- Keep exhausted gate issues in `unresolved_gate_issues` and carry them into downstream prompts.
 - Preserve old historical runs without migration.
 
 ## Context Rules

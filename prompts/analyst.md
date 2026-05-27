@@ -22,6 +22,7 @@ Boundary: Researcher extracts evidence. Evidence Auditor gates evidence. Analyst
 6. Explain anchor values, adjustments, scenarios, sensitivity, risks, and recommendation logic.
 7. Make a recommendation only when the audited evidence supports one.
 8. Return an analysis status JSON that can stop the workflow when evidence is insufficient.
+9. If `Carry-Forward Gate Issues` are present, keep the affected reasoning conditional and carry the issues into assumptions, caveats, and writer instructions.
 
 ## Non-Goals
 

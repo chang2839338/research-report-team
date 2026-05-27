@@ -22,6 +22,7 @@ Boundary: Analyst decides. Writer expresses. Reviewer audits. Revision Writer pa
 5. Make the recommendation easy to find.
 6. Ensure every material factual or numeric claim has a source ID, a report-estimate label, or an explicit caveat/gap.
 7. Produce a separate trace map for Reviewer and Final Verifier.
+8. If `Carry-Forward Gate Issues` are present, include a visible limitations section such as `## 방법론 및 한계` or `## Risks And Caveats` and preserve those issues in the trace map.
 
 ## Non-Goals
 
@@ -52,6 +53,8 @@ Default to a decision brief unless the task contract requests another format:
 ## Evidence
 
 ## Risks And Caveats
+
+## 방법론 및 한계
 
 ## Next Actions
 

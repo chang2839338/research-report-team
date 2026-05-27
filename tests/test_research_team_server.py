@@ -137,6 +137,8 @@ class WorkflowHarnessTests(unittest.TestCase):
             self.assertEqual(status["docx_status"], "generated")
             self.assertEqual(status["selected_final_candidate"], "artifacts/04_draft.md")
             self.assertEqual(manifest["selected_source_artifact"], "artifacts/04_draft.md")
+            self.assertEqual(manifest["publication_status"], "completed")
+            self.assertEqual(status["unresolved_gate_issues"], [])
             self.assertIn("selected_source_sha256", manifest)
             self.assertEqual(len(runner.prompts), 7)
             self.assertTrue((run_dir / "artifacts" / "08_final.md").is_file())
@@ -159,43 +161,71 @@ class WorkflowHarnessTests(unittest.TestCase):
             self.assertTrue(status["pending_user_feedback"])
             self.assertEqual(completed, ["manager"])
 
-    def test_evidence_block_stops_before_analysis(self):
-        replies = [_manager_reply(), _research_reply(), _evidence_reply("blocked")]
+    def test_evidence_block_remediates_then_continues_with_recorded_issue(self):
+        replies = [
+            _manager_reply(),
+            _research_reply(),
+            _evidence_reply("blocked"),
+            _research_reply(),
+            _evidence_reply("blocked"),
+            _research_reply(),
+            _evidence_reply("blocked"),
+            _analysis_reply("ready"),
+            _writer_reply(),
+            _review_reply("approved"),
+            _final_reply("ready", "artifacts/04_draft.md"),
+        ]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _write_prompts(root)
             store = RunStore(root / "runs")
             run_dir = store.create_run("run3", "제목", "요청", "quality-first")
-            engine = WorkflowEngine(root, store, FakeRunner(replies))
+            runner = FakeRunner(replies)
+            engine = WorkflowEngine(root, store, runner)
 
             engine.run_workflow("run3")
 
             status = store.read_json(run_dir / "status.json")
+            manifest = store.read_json(run_dir / "artifacts" / "08_final_manifest.json")
             completed = [entry["key"] for entry in status["agent_runs"]]
-            self.assertEqual(status["state"], "blocked")
-            self.assertEqual(completed, ["manager", "researcher", "evidence_auditor"])
-            self.assertFalse((run_dir / "artifacts" / "03_analysis.md").is_file())
+            self.assertEqual(status["state"], "completed_with_unresolved_issues")
+            self.assertIn("analyst", completed)
+            self.assertIn("publisher", completed)
+            self.assertEqual(status["unresolved_gate_issues"][0]["gate"], "evidence")
+            self.assertEqual(manifest["publication_status"], "completed_with_unresolved_issues")
+            self.assertEqual(len([entry for entry in status["agent_runs"] if entry["key"] == "researcher"]), 3)
 
-    def test_analysis_block_stops_before_writer(self):
+    def test_analysis_block_remediates_then_continues_with_recorded_issue(self):
         replies = [
             _manager_reply(),
             _research_reply(),
             _evidence_reply("pass"),
-            _analysis_reply("blocked"),
+            _analysis_reply("needs_research"),
+            _research_reply(),
+            _evidence_reply("pass"),
+            _analysis_reply("needs_research"),
+            _research_reply(),
+            _evidence_reply("pass"),
+            _analysis_reply("needs_research"),
+            _writer_reply(),
+            _review_reply("approved"),
+            _final_reply("ready", "artifacts/04_draft.md"),
         ]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _write_prompts(root)
             store = RunStore(root / "runs")
             run_dir = store.create_run("run4", "제목", "요청", "quality-first")
-            engine = WorkflowEngine(root, store, FakeRunner(replies))
+            runner = FakeRunner(replies)
+            engine = WorkflowEngine(root, store, runner)
 
             engine.run_workflow("run4")
 
             status = store.read_json(run_dir / "status.json")
             completed = [entry["key"] for entry in status["agent_runs"]]
-            self.assertEqual(status["state"], "blocked")
-            self.assertNotIn("writer", completed)
+            self.assertEqual(status["state"], "completed_with_unresolved_issues")
+            self.assertIn("writer", completed)
+            self.assertEqual(status["unresolved_gate_issues"][0]["gate"], "analysis")
 
     def test_targeted_revision_publishes_revision_candidate(self):
         replies = [
@@ -206,6 +236,7 @@ class WorkflowHarnessTests(unittest.TestCase):
             _writer_reply(),
             _review_reply("targeted_revision"),
             _revision_reply(),
+            _review_reply("approved"),
             _final_reply("ready", "artifacts/06_revision.md"),
         ]
         with tempfile.TemporaryDirectory() as tmp:
@@ -225,7 +256,36 @@ class WorkflowHarnessTests(unittest.TestCase):
             self.assertEqual(status["selected_final_candidate"], "artifacts/06_revision.md")
             self.assertIn("Revised Draft", final_text)
 
-    def test_final_verifier_block_prevents_publish(self):
+    def test_reviewer_revision_exhaustion_continues_to_final_report(self):
+        replies = [
+            _manager_reply(),
+            _research_reply(),
+            _evidence_reply("pass"),
+            _analysis_reply("ready"),
+            _writer_reply(),
+            _review_reply("needs_revision"),
+            _revision_reply(),
+            _review_reply("needs_revision"),
+            _revision_reply(),
+            _review_reply("needs_revision"),
+            _final_reply("ready", "artifacts/06_revision.md"),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_prompts(root)
+            store = RunStore(root / "runs")
+            run_dir = store.create_run("run9", "?쒕ぉ", "?붿껌", "quality-first")
+            engine = WorkflowEngine(root, store, FakeRunner(replies))
+
+            engine.run_workflow("run9")
+
+            status = store.read_json(run_dir / "status.json")
+            completed = [entry["key"] for entry in status["agent_runs"]]
+            self.assertEqual(status["state"], "completed_with_unresolved_issues")
+            self.assertIn("publisher", completed)
+            self.assertEqual(status["unresolved_gate_issues"][0]["gate"], "review")
+
+    def test_final_verifier_block_exhaustion_publishes_conditionally(self):
         replies = [
             _manager_reply(),
             _research_reply(),
@@ -234,6 +294,10 @@ class WorkflowHarnessTests(unittest.TestCase):
             _writer_reply(),
             _review_reply("approved"),
             _final_reply("blocked", "artifacts/04_draft.md", block_publish=True),
+            _revision_reply(),
+            _final_reply("blocked", "artifacts/06_revision.md", block_publish=True),
+            _revision_reply(),
+            _final_reply("blocked", "artifacts/06_revision.md", block_publish=True),
         ]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -245,17 +309,24 @@ class WorkflowHarnessTests(unittest.TestCase):
             engine.run_workflow("run6")
 
             status = store.read_json(run_dir / "status.json")
+            manifest = store.read_json(run_dir / "artifacts" / "08_final_manifest.json")
             completed = [entry["key"] for entry in status["agent_runs"]]
-            self.assertEqual(status["state"], "blocked")
-            self.assertNotIn("publisher", completed)
-            self.assertFalse((run_dir / "artifacts" / "08_final.md").is_file())
+            self.assertEqual(status["state"], "completed_with_unresolved_issues")
+            self.assertIn("publisher", completed)
+            self.assertTrue((run_dir / "artifacts" / "08_final.md").is_file())
+            self.assertEqual(status["unresolved_gate_issues"][0]["gate"], "final")
+            self.assertEqual(manifest["publication_status"], "completed_with_unresolved_issues")
 
     def test_artifact_marker_repair_retries_once(self):
         replies = [
             _manager_reply(),
             "bad response without markers",
             _research_reply(),
-            _evidence_reply("blocked"),
+            _evidence_reply("pass"),
+            _analysis_reply("ready"),
+            _writer_reply(),
+            _review_reply("approved"),
+            _final_reply("ready", "artifacts/04_draft.md"),
         ]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -267,7 +338,7 @@ class WorkflowHarnessTests(unittest.TestCase):
 
             engine.run_workflow("run7")
 
-            self.assertEqual(len(runner.prompts), 4)
+            self.assertEqual(len(runner.prompts), 8)
             self.assertTrue((run_dir / "artifacts" / "01_source_provenance.md").is_file())
 
     def test_server_public_response_includes_gate_fields(self):

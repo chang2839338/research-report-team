@@ -23,6 +23,7 @@ Boundary: Evidence Auditor gates upstream evidence. Reviewer checks whether the 
 4. Check whether the recommendation follows the Analyst rollup and audited evidence.
 5. Request only specific, evidence-supported revisions.
 6. Emit a machine-readable decision JSON with exact enum values.
+7. If `Carry-Forward Gate Issues` are present, check that the draft discloses them clearly instead of treating them as resolved.
 
 ## Non-Goals
 
