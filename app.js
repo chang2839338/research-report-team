@@ -6,11 +6,13 @@ const STATUS = {
   completed: "\uc644\ub8cc",
   completed_markdown_only: "Markdown \uc644\ub8cc",
   failed: "\uc2e4\ud328",
+  blocked: "\ucc28\ub2e8",
   cancelled: "\ucde8\uc18c",
   intake: "\uc900\ube44",
+  needs_clarification: "\ud655\uc778 \ud544\uc694",
 };
 
-const TERMINAL_STATES = new Set(["completed", "completed_markdown_only", "failed", "cancelled"]);
+const TERMINAL_STATES = new Set(["completed", "completed_markdown_only", "failed", "blocked", "cancelled", "needs_clarification"]);
 
 const elements = {
   runForm: document.querySelector("#runForm"),
@@ -27,6 +29,49 @@ const elements = {
   selectedState: document.querySelector("#selectedState"),
   detailViewer: document.querySelector("#detailViewer"),
   subtabs: document.querySelector("#subtabs"),
+  subtabDescription: document.querySelector("#subtabDescription"),
+};
+
+const ROLE_DESCRIPTIONS = {
+  manager: "작업 목표와 산출물 계약을 구조화합니다.",
+  researcher: "근거, 출처, 주장, 숫자, 공백을 추출합니다.",
+  evidence_auditor: "근거의 사용 가능성과 제한 사항을 판정합니다.",
+  analyst: "감사된 근거로 의사결정 모델을 작성합니다.",
+  writer: "분석을 독자용 보고서 초안으로 작성합니다.",
+  reviewer: "초안의 품질, 근거, 추적성을 감사합니다.",
+  revision_writer: "검토자가 지정한 수정만 반영합니다.",
+  final_verifier: "최종 후보의 발행 가능 여부를 확인합니다.",
+  publisher: "검증된 후보를 최종 산출물로 발행합니다.",
+};
+
+const VIEW_DESCRIPTIONS = {
+  prompt: "Agent 실행에 사용된 전체 프롬프트입니다.",
+  "00_task_contract.json": "작업 진행 여부와 요구사항을 담은 구조화 계약입니다.",
+  "00_task_brief.md": "후속 Agent가 공유하는 사람이 읽는 작업 요약입니다.",
+  "01_research.md": "조사 계획과 핵심 근거 메모입니다.",
+  "01_sources.md": "사용된 출처의 ID, 날짜, 신뢰도, 한계입니다.",
+  "01_claims.md": "주장 ID와 출처 ID의 예비 연결표입니다.",
+  "01_gaps.md": "근거 공백, 미해결 주장, 후속 검색 항목입니다.",
+  "01_numeric_assumptions.md": "숫자, 기간, 단위, 출처를 추적하는 장부입니다.",
+  "01_source_provenance.md": "검색어, 접근 경로, URL, 접근일의 출처 이력입니다.",
+  "02_evidence_gate.json": "분석 진행 가능 여부를 결정하는 근거 게이트입니다.",
+  "02_evidence_audit.md": "근거 사용, 제외, caveat 지침의 사람이 읽는 감사 결과입니다.",
+  "03a_decision_frame.md": "의사결정 질문, 옵션, 기준, 제약을 정리합니다.",
+  "03b_option_evaluation.md": "옵션별 기준 평가와 근거 ID를 비교합니다.",
+  "03c_scenarios_and_recommendation.md": "시나리오, 조정 논리, 추천안을 정리합니다.",
+  "03_analysis.md": "Writer가 사용할 분석 요약본입니다.",
+  "03_analysis_status.json": "분석 결과가 작성 단계로 넘어갈 수 있는지 나타냅니다.",
+  "04_draft.md": "독자에게 보여줄 보고서 초안입니다.",
+  "04_writer_trace.md": "초안의 핵심 주장과 근거 ID를 연결한 추적표입니다.",
+  "05_review_decision.json": "검토 통과/수정 필요 여부와 수정 ID를 담은 결정값입니다.",
+  "05_review.md": "초안 품질에 대한 사람이 읽는 검토 결과입니다.",
+  "05_claim_audit.md": "초안 내 주장별 근거 추적성 감사표입니다.",
+  "06_revision.md": "필수 수정사항이 반영된 개정 초안입니다.",
+  "06_revision_trace.md": "수정 ID별 반영 여부와 변경 위치입니다.",
+  "07_final_verification.json": "최종 발행 가능 여부를 결정하는 게이트입니다.",
+  "07_final_verification.md": "최종 후보 검증의 사람이 읽는 결과입니다.",
+  "08_final.md": "검증된 후보를 복사한 최종 Markdown 보고서입니다.",
+  "08_final_manifest.json": "발행 시각, 선택 후보, 해시, caveat, DOCX 상태입니다.",
 };
 
 let currentRun = null;
@@ -77,6 +122,8 @@ async function createRun(title, brief) {
       method: "POST",
       body: JSON.stringify({ title, brief, mode: "quality-first" }),
     });
+    elements.titleInput.value = "";
+    elements.briefInput.value = "";
     selectedRoleKey = "manager";
     selectedView = "prompt";
     await loadRun(run.id);
@@ -101,13 +148,15 @@ function render() {
   const completed = completedRoleKeys(status);
   const usage = tokenUsageForRole(selectedRole);
   const totalUsage = totalTokenUsage(status);
+  const roleDuration = durationForRole(selectedRole, status, completed);
+  const totalDuration = durationForRun(task, status);
 
   elements.workspaceTitle.textContent = task.title;
-  elements.statusMessage.textContent = formatTokenUsage(totalUsage);
+  elements.statusMessage.textContent = formatUsageAndDuration(totalUsage, totalDuration);
   elements.statusMessage.title = formatTokenUsageDetail(totalUsage);
-  elements.selectedRole.textContent = selectedRole.display_role || selectedRole.role;
+  elements.selectedRole.textContent = formatRoleHeading(selectedRole);
   elements.selectedLabel.textContent = selectedRole.label;
-  elements.selectedTokens.textContent = formatTokenUsage(usage);
+  elements.selectedTokens.textContent = formatUsageAndDuration(usage, roleDuration);
   elements.selectedTokens.title = formatTokenUsageDetail(usage);
   elements.selectedState.textContent = roleStateLabel(selectedRole, status, completed);
 
@@ -117,11 +166,11 @@ function render() {
 
 function renderEmpty() {
   elements.workspaceTitle.textContent = "\ubcf4\uace0\uc11c \uc791\uc5c5\uc744 \uc2dc\uc791\ud558\uc138\uc694";
-  elements.statusMessage.textContent = "\ud1a0\ud070 -";
+  elements.statusMessage.textContent = "\ud1a0\ud070 - \u00b7 \uc18c\uc694\uc2dc\uac04 -";
   elements.statusMessage.title = "";
   elements.stepList.innerHTML = "";
   renderDetail("\uc9c4\ud589 \ub2e8\uacc4\uc5d0\uc11c Agent\ub97c \uc120\ud0dd\ud558\uc138\uc694.");
-  elements.selectedTokens.textContent = "\ud1a0\ud070 -";
+  elements.selectedTokens.textContent = "\ud1a0\ud070 - \u00b7 \uc18c\uc694\uc2dc\uac04 -";
   elements.selectedTokens.title = "";
   elements.selectedState.textContent = "\ub300\uae30";
   renderSubtabs();
@@ -195,6 +244,16 @@ function renderSubtabs() {
     });
     elements.subtabs.appendChild(button);
   });
+  renderSubtabDescription(views.find((view) => view.key === selectedView) || views[0]);
+}
+
+function renderSubtabDescription(view) {
+  if (!elements.subtabDescription) return;
+  if (!view) {
+    elements.subtabDescription.textContent = "";
+    return;
+  }
+  elements.subtabDescription.textContent = `${view.label} : ${descriptionForView(view)}`;
 }
 
 async function loadVisibleFiles() {
@@ -317,7 +376,7 @@ function findSelectedRole() {
 function viewsForRole(role) {
   if (!role) return [];
   return [
-    { key: "prompt", label: "\ud504\ub86c\ud504\ud2b8", path: role.prompt },
+    ...(role.prompt ? [{ key: "prompt", label: "Prompt", path: role.prompt }] : []),
     ...(role.artifacts || [{ label: role.label, path: role.artifact }]).map((artifact) => ({
       key: artifact.path,
       label: artifact.label,
@@ -345,6 +404,10 @@ function tokenUsageForRole(role) {
   return run?.usage || null;
 }
 
+function agentRunForRole(role) {
+  return (currentRun?.status.agent_runs || []).find((item) => (item.key || roleKeyFromArtifact(item.artifact)) === role.key) || null;
+}
+
 function totalTokenUsage(status) {
   const total = {};
   for (const run of status.agent_runs || []) {
@@ -363,7 +426,11 @@ function tokenTotal(usage) {
 
 function formatTokenUsage(usage) {
   if (!usage) return "\ud1a0\ud070 -";
-  return `\ud1a0\ud070 ${formatNumber(tokenTotal(usage))} \u00b7 \uc785\ub825 ${formatNumber(usage.input_tokens)} \u00b7 \ucd9c\ub825 ${formatNumber(usage.output_tokens)}`;
+  return `\ud1a0\ud070 ${formatNumber(tokenTotal(usage))} (\uc785\ub825 ${formatNumber(usage.input_tokens)} + \ucd9c\ub825 ${formatNumber(usage.output_tokens)})`;
+}
+
+function formatUsageAndDuration(usage, durationMs) {
+  return `${formatTokenUsage(usage)} \u00b7 ${formatDuration(durationMs)}`;
 }
 
 function formatTokenUsageDetail(usage) {
@@ -380,6 +447,46 @@ function formatTokenUsageDetail(usage) {
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString("ko-KR");
+}
+
+function formatRoleHeading(role) {
+  const name = role.display_role || role.role;
+  return `${name} : ${ROLE_DESCRIPTIONS[role.key] || "\uc774 \ub2e8\uacc4\uc758 \uc0b0\ucd9c\ubb3c\uc744 \uc0dd\uc131\ud569\ub2c8\ub2e4."}`;
+}
+
+function descriptionForView(view) {
+  const pathKey = (view.path || view.key || "").replace(/^artifacts\//, "").replace(/^prompts\//, "");
+  return VIEW_DESCRIPTIONS[pathKey] || VIEW_DESCRIPTIONS[view.key] || "\uc120\ud0dd\ud55c \uc0b0\ucd9c\ubb3c\uc758 \ub0b4\uc6a9\uc744 \ubcf4\uc5ec\uc90d\ub2c8\ub2e4.";
+}
+
+function durationForRole(role, status, completed) {
+  const run = agentRunForRole(role);
+  if (run?.started_at && run?.completed_at) return durationBetween(run.started_at, run.completed_at);
+  if (isCurrentRole(role, status) && status.current_role_started_at) return durationBetween(status.current_role_started_at, new Date().toISOString());
+  if (completed.has(role.key) && run?.completed_at) return 0;
+  return null;
+}
+
+function durationForRun(task, status) {
+  const start = task?.created_at || status?.created_at;
+  if (!start) return null;
+  const end = TERMINAL_STATES.has(status.state) ? status.updated_at : new Date().toISOString();
+  return durationBetween(start, end);
+}
+
+function durationBetween(startValue, endValue) {
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return Math.max(0, end.getTime() - start.getTime());
+}
+
+function formatDuration(ms) {
+  if (ms === null || ms === undefined) return "\uc18c\uc694\uc2dc\uac04 -";
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `\uc18c\uc694\uc2dc\uac04 ${formatNumber(minutes)}\ubd84 ${remainingSeconds}\ucd08`;
 }
 
 function formatRunTime(run) {
@@ -409,7 +516,7 @@ function formatDateTime(value) {
 function roleStateLabel(role, status, completed) {
   if (completed.has(role.key)) return "\uc644\ub8cc";
   if (status.state === "failed" && isCurrentRole(role, status)) return "\uc2e4\ud328";
-  if (["running", "needs_revision", "publishing"].includes(status.state) && isCurrentRole(role, status)) return translateState(status.state);
+  if (["running", "needs_revision", "publishing", "blocked", "needs_clarification"].includes(status.state) && isCurrentRole(role, status)) return translateState(status.state);
   return "\ub300\uae30";
 }
 
@@ -424,6 +531,8 @@ function stateClass(state) {
     "\uc218\uc815 \ud544\uc694": "active",
     "\uac8c\uc2dc \uc911": "active",
     "\uc2e4\ud328": "failed",
+    "\ucc28\ub2e8": "failed",
+    "\ud655\uc778 \ud544\uc694": "active",
   }[state] || "";
 }
 

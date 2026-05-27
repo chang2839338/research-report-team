@@ -86,8 +86,8 @@ Expected result:
 
 - A new timestamped folder appears under `runs`, such as `runs/20260525_1338`.
 - The folder includes `task.json`, `status.json`, `sources.md`, `prompts/`, and `artifacts/`.
-- `prompts/` includes numbered role prompt files from `00_manager.md` through `08_publisher.md`.
-- `artifacts/` includes the quality-first artifact set from `00_task_brief.md` through `08_final.md`, plus `08_final.docx` and `08_final_manifest.json`.
+- `prompts/` includes numbered Codex role prompt files from `00_manager.md` through `07_final_verifier.md`; Publisher is a system step.
+- `artifacts/` includes the quality-first artifact set from `00_task_contract.json` through `08_final.md`, plus `08_final.docx` and `08_final_manifest.json`.
 
 After testing, delete the temporary folder if it is not needed.
 

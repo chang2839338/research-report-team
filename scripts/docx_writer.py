@@ -15,7 +15,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 def markdown_to_plain_text(markdown: str) -> str:
     text = re.sub(r"```.*?```", "", markdown, flags=re.DOTALL)
     text = re.sub(r"`([^`]+)`", r"\1", text)
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", text)
     text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
     text = re.sub(r"^\s*[-*]\s+", "- ", text, flags=re.MULTILINE)
     text = text.replace("**", "").replace("__", "")
@@ -59,4 +59,3 @@ def write_minimal_docx(path: Path, title: str, body: str) -> None:
 
 def _paragraph_xml(text: str) -> str:
     return f"<w:p><w:r><w:t>{escape(text)}</w:t></w:r></w:p>"
-

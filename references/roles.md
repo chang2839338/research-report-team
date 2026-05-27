@@ -2,75 +2,58 @@
 
 Use stable core roles for every assignment. Add temporary specialists only when the task needs domain judgment the core team should not fake.
 
+## Core Boundary Sentence
+
+Manager contracts; Researcher extracts; Evidence Auditor gates; Analyst decides; Writer expresses; Reviewer audits; Revision Writer patches; Final Verifier gates; Publisher packages.
+
 ## Manager
 
-Responsibilities:
-- Clarify the user's decision, audience, scope, deadline, format, and constraints.
-- Turn the request into a task brief and acceptance criteria.
-- Assign work to core roles and any temporary specialist.
-- Inspect each output before it becomes part of the final report.
-- Request targeted revisions when outputs do not satisfy the brief.
-- Deliver the final report and note residual uncertainty.
-
-Avoid:
-- Starting research before the decision goal is clear.
-- Letting the team produce a generic essay instead of a decision-ready artifact.
+- Creates `00_task_contract.json` and `00_task_brief.md`.
+- Pauses for clarification when missing intent would materially change the work.
+- Does not research, recommend, draft, audit, or publish.
 
 ## Researcher
 
-Responsibilities:
-- Gather source-backed facts, current context, examples, market/company/product details, and source links.
-- Separate facts from interpretation.
-- Record dates, source type, and limitations when relevant.
-- Flag contradictions between sources.
+- Extracts source-backed facts, preliminary claim links, numeric assumptions, gaps, and provenance.
+- Uses stable `S#`, `C#`, and `N#` IDs.
+- Does not decide final evidence admissibility or recommendations.
 
-Avoid:
-- Making recommendations before the Analyst has compared options.
-- Treating unsourced model memory as current evidence.
+## Evidence Auditor
+
+- Turns Researcher artifacts into admissibility decisions.
+- Owns usable, caveated, excluded, blocked, and incomplete evidence states.
+- Does not make recommendations or write report prose.
 
 ## Analyst
 
-Responsibilities:
-- Define decision criteria.
-- Compare options against those criteria.
-- Identify tradeoffs, risks, dependencies, and implications.
-- Convert research into a recommendation or decision framing.
-
-Avoid:
-- Hiding uncertainty.
-- Choosing an option without showing why it beats alternatives.
+- Converts audited evidence into decision criteria, option evaluation, scenarios, and recommendation logic.
+- Does not audit sources again or write final report prose.
 
 ## Writer
 
-Responsibilities:
-- Convert approved findings and analysis into a readable document.
-- Match the user's requested format, language, tone, and audience.
-- Keep the executive summary short and decision-oriented.
-- Preserve citations and caveats.
-
-Avoid:
-- Adding unsupported claims for polish.
-- Expanding the report beyond the user's scope.
+- Produces the reader-facing draft and writer trace.
+- Preserves Analyst logic, source IDs, numbers, caveats, and confidence labels.
+- Does not add unsupported claims.
 
 ## Reviewer
 
-Responsibilities:
-- Check the draft against the task brief and quality rubric.
-- Identify missing evidence, weak logic, unclear recommendation, and format mismatch.
-- Request specific revisions.
-- Approve only when the report is useful for the intended decision.
+- Audits the draft and writer trace against the task, evidence gate, and analysis.
+- Emits a structured review decision and required revision IDs.
+- Does not rewrite the report.
 
-Avoid:
-- Rewriting the whole report when a targeted revision is enough.
-- Approving a fluent but unsupported document.
+## Revision Writer
 
-## Temporary Specialists
+- Applies only required revision IDs from the review decision.
+- Produces a revised draft and revision trace.
+- Does not perform optional rewriting.
 
-Use sparingly:
-- Market Expert: market sizing, competition, customer segments, go-to-market.
-- Technical Evaluator: architecture, feasibility, tools, implementation risk.
-- Legal/Policy Checker: regulations, compliance, terms, policy constraints.
-- Financial Analyst: cost, ROI, pricing, budget, sensitivity assumptions.
-- Risk Analyst: operational, strategic, reputational, security, and execution risks.
-- Korean Executive Editor: Korean business style, executive summaries, board/report tone.
+## Final Verifier
 
+- Checks the selected final candidate and emits the final publication gate.
+- Blocks publication when required revisions or evidence caveats remain unresolved.
+
+## Publisher
+
+- Is a deterministic system step.
+- Copies the verified candidate to `08_final.md`, generates DOCX, and writes the final manifest.
+- Does not call Codex or rewrite substantive content.

@@ -2,15 +2,31 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import subprocess
 from typing import Any
 
 from codex_runner import CodexRunner, compact_codex_output, extract_token_usage
-from contracts import RoleSpec, WORKFLOW, review_requires_revision, split_artifact_sections
+from contracts import (
+    SYSTEM,
+    RoleSpec,
+    WORKFLOW,
+    analysis_gate_decision,
+    evidence_gate_decision,
+    final_gate_decision,
+    read_json_artifact,
+    review_requires_revision,
+    review_decision,
+    split_artifact_sections,
+    task_contract_status,
+)
 from docx_writer import write_docx_from_markdown
 from store import RunStore, now_iso
+
+
+BLOCKED_STATES = {"blocked", "failed", "cancelled", "needs_clarification"}
 
 
 class WorkflowEngine:
@@ -25,19 +41,28 @@ class WorkflowEngine:
         try:
             for role in WORKFLOW:
                 status = self.store.read_json(run_dir / "status.json")
+                if status.get("state") in BLOCKED_STATES:
+                    return
                 if role.conditional == "review_requires_revision" and not _needs_revision(run_dir):
                     continue
-                if role.key == "final_verifier" and _needs_revision(run_dir):
-                    self.store.update_status(run_dir, state="needs_revision")
 
-                self.store.update_status(run_dir, state="running", current_role=role.key, failed_role="", error="")
+                if role.execution == SYSTEM:
+                    self._run_system_role(run_dir, task, role)
+                    continue
+
+                role_started_at = now_iso()
+                self.store.update_status(
+                    run_dir,
+                    state="running",
+                    current_role=role.key,
+                    current_role_started_at=role_started_at,
+                    failed_role="",
+                    error="",
+                )
                 usage = self.run_role(run_dir, task, role)
-                self.store.append_agent_run(run_dir, _agent_entry(role), role.artifact_paths, usage)
-
-                if role.key == "reviewer":
-                    self._record_review_decision(run_dir)
-
-            self.publish(run_dir, task)
+                self.store.append_agent_run(run_dir, _agent_entry(role, role_started_at), role.artifact_paths, usage)
+                if self._apply_role_gate(run_dir, role):
+                    return
         except Exception as exc:
             detail = _format_exception(exc)
             self.store.atomic_write_text(run_dir / "error.log", detail)
@@ -65,7 +90,11 @@ class WorkflowEngine:
             raise RuntimeError(f"{role.role} returned an empty artifact")
 
         if len(role.artifacts) > 1:
-            sections = split_artifact_sections(reply, role.artifact_paths)
+            try:
+                sections = split_artifact_sections(reply, role.artifact_paths)
+            except RuntimeError as exc:
+                sections, repair_usage = self._repair_artifact_sections(run_dir, role, reply, str(exc))
+                usage = _merge_usage(usage, repair_usage)
             for name, content in sections.items():
                 self.store.atomic_write_text(run_dir / "artifacts" / name, content)
         else:
@@ -97,6 +126,7 @@ class WorkflowEngine:
             "- Output only the Markdown body for the target artifact or artifact sections.",
             "- Do not wrap the answer in code fences.",
             "- Do not edit local files; the server will save your final answer.",
+            "- If a target artifact ends in .json, that artifact section must contain valid JSON only.",
         ]
         if len(role.artifacts) > 1:
             context_parts.extend(
@@ -110,6 +140,9 @@ class WorkflowEngine:
         else:
             context_parts.append(f"- Output artifact: artifacts/{role.primary_artifact}")
 
+        if role.key == "final_verifier":
+            context_parts.append(f"- Final candidate artifact: artifacts/{_select_candidate_name(run_dir)}")
+
         context_parts.extend(["", "# Role Prompt", role_prompt])
 
         for artifact in role.inputs:
@@ -118,24 +151,31 @@ class WorkflowEngine:
         for extra in role.extra_inputs:
             context_parts.extend(["", f"# Reference: {extra}", _read_optional(self.root / extra)])
 
-        if role.key == "publisher":
-            context_parts.extend(
-                [
-                    "",
-                    "# Publisher Instruction",
-                    "Produce artifacts/08_final.md as the final Markdown report only. Use 06_revision.md if it exists and is substantive; otherwise use 04_draft.md. "
-                    "Apply Final Verifier notes. The server will create 08_final.docx and 08_final_manifest.json after this role completes.",
-                ]
-            )
         return "\n".join(context_parts).strip() + "\n"
 
-    def publish(self, run_dir: Path, task: dict[str, Any]) -> None:
-        self.store.update_status(run_dir, state="publishing", current_role="publisher")
+    def publish(self, run_dir: Path, task: dict[str, Any], role: RoleSpec) -> None:
+        self.store.update_status(run_dir, state="publishing", current_role=role.key)
+        final_gate = read_json_artifact(run_dir, "07_final_verification.json")
+        decision = final_gate_decision(final_gate)
+        if decision == "blocked" or final_gate.get("block_publish") is True:
+            self.store.update_status(
+                run_dir,
+                state="blocked",
+                current_role="",
+                final_gate=final_gate,
+                error="Final Verifier blocked publication.",
+            )
+            return
+
+        candidate_name = _verified_candidate_name(run_dir, final_gate)
+        candidate = run_dir / "artifacts" / candidate_name
+        candidate_text = _read_candidate(candidate)
         final_md = run_dir / "artifacts" / "08_final.md"
         final_docx = run_dir / "artifacts" / "08_final.docx"
         final_manifest = run_dir / "artifacts" / "08_final_manifest.json"
-        if not final_md.is_file() or not final_md.read_text(encoding="utf-8").strip():
-            raise RuntimeError("final Markdown artifact is missing")
+
+        final_text = _normalize_final_markdown(candidate_text)
+        self.store.atomic_write_text(final_md, final_text)
 
         docx_status = "generated"
         try:
@@ -144,14 +184,21 @@ class WorkflowEngine:
             docx_status = "failed"
             self.store.append_event(run_dir, {"type": "docx.failed", "error": str(exc)})
 
+        status = self.store.read_json(run_dir / "status.json")
         manifest = {
             "published_at": now_iso(),
             "title": task["title"],
+            "selected_source_artifact": f"artifacts/{candidate_name}",
+            "selected_source_sha256": _sha256_text(candidate_text),
             "final_markdown": "artifacts/08_final.md",
+            "final_markdown_sha256": _sha256_text(final_text),
             "final_docx": "artifacts/08_final.docx" if final_docx.is_file() else "",
+            "final_manifest": "artifacts/08_final_manifest.json",
             "docx_status": docx_status,
-            "quality_gate": self.store.read_json(run_dir / "status.json").get("quality_gate", {}),
-            "revision_count": self.store.read_json(run_dir / "status.json").get("revision_count", 0),
+            "final_gate": final_gate,
+            "carry_forward_caveats": final_gate.get("carry_forward_caveats", []),
+            "revision_count": status.get("revision_count", 0),
+            "markdown_is_auditable_source": True,
         }
         self.store.write_json(final_manifest, manifest)
         final_complete = final_docx.is_file() and final_manifest.is_file()
@@ -160,22 +207,162 @@ class WorkflowEngine:
             run_dir,
             state=state,
             current_role="",
+            selected_final_candidate=f"artifacts/{candidate_name}",
+            final_gate=final_gate,
             docx_status=docx_status if final_docx.is_file() else "failed",
             error="",
         )
+        self.store.append_event(
+            run_dir,
+            {
+                "type": "system.published",
+                "role": role.key,
+                "selected_source_artifact": f"artifacts/{candidate_name}",
+                "final_markdown": "artifacts/08_final.md",
+                "docx_status": docx_status,
+            },
+        )
 
-    def _record_review_decision(self, run_dir: Path) -> None:
-        review = _read_optional(run_dir / "artifacts" / "05_review.md")
-        needs_revision = review_requires_revision(review)
+    def _apply_role_gate(self, run_dir: Path, role: RoleSpec) -> bool:
+        if role.key == "manager":
+            contract = read_json_artifact(run_dir, "00_task_contract.json")
+            status = task_contract_status(contract)
+            self.store.update_status(run_dir, task_contract=contract)
+            if status == "needs_user_input":
+                self.store.update_status(
+                    run_dir,
+                    state="needs_clarification",
+                    current_role="",
+                    pending_user_feedback=True,
+                    error="Manager requested clarification before research.",
+                )
+                return True
+            return False
+
+        if role.key == "evidence_auditor":
+            gate = read_json_artifact(run_dir, "02_evidence_gate.json")
+            decision = evidence_gate_decision(gate)
+            self.store.update_status(run_dir, evidence_gate=gate)
+            if decision in {"blocked", "incomplete"}:
+                self.store.update_status(
+                    run_dir,
+                    state="blocked",
+                    current_role="",
+                    error=f"Evidence gate stopped workflow: {decision}",
+                )
+                return True
+            return False
+
+        if role.key == "analyst":
+            gate = read_json_artifact(run_dir, "03_analysis_status.json")
+            decision = analysis_gate_decision(gate)
+            self.store.update_status(run_dir, analysis_gate=gate)
+            if decision in {"blocked", "needs_research"}:
+                self.store.update_status(
+                    run_dir,
+                    state="blocked",
+                    current_role="",
+                    error=f"Analysis gate stopped workflow: {decision}",
+                )
+                return True
+            return False
+
+        if role.key == "reviewer":
+            decision = read_json_artifact(run_dir, "05_review_decision.json")
+            self._record_review_decision(run_dir, decision)
+            return False
+
+        if role.key == "revision_writer":
+            self.store.update_status(
+                run_dir,
+                revision_status={"status": "completed", "artifact": "artifacts/06_revision.md"},
+            )
+            return False
+
+        if role.key == "final_verifier":
+            gate = read_json_artifact(run_dir, "07_final_verification.json")
+            decision = final_gate_decision(gate)
+            self.store.update_status(run_dir, final_gate=gate)
+            if decision == "blocked" or gate.get("block_publish") is True:
+                self.store.update_status(
+                    run_dir,
+                    state="blocked",
+                    current_role="",
+                    error="Final Verifier blocked publication.",
+                )
+                return True
+            return False
+
+        return False
+
+    def _record_review_decision(self, run_dir: Path, decision: dict[str, Any]) -> None:
+        resolved_decision = review_decision(decision)
+        needs_revision = review_requires_revision(decision)
         status = self.store.read_json(run_dir / "status.json")
         revision_count = status.get("revision_count", 0) + (1 if needs_revision else 0)
-        decision = "needs_revision" if needs_revision else "approved"
         self.store.update_status(
             run_dir,
-            state="needs_revision" if needs_revision else "running",
             revision_count=revision_count,
-            quality_gate={"decision": decision, "review_artifact": "artifacts/05_review.md"},
+            review_gate=decision,
+            revision_status={
+                "required": needs_revision,
+                "decision": resolved_decision,
+                "status": "pending" if needs_revision else "not_required",
+            },
         )
+
+    def _run_system_role(self, run_dir: Path, task: dict[str, Any], role: RoleSpec) -> None:
+        role_started_at = now_iso()
+        self.store.update_status(run_dir, current_role_started_at=role_started_at)
+        self.publish(run_dir, task, role)
+        status = self.store.read_json(run_dir / "status.json")
+        if status.get("state") not in BLOCKED_STATES:
+            self.store.append_agent_run(run_dir, _agent_entry(role, role_started_at), role.artifact_paths, None)
+
+    def _repair_artifact_sections(
+        self,
+        run_dir: Path,
+        role: RoleSpec,
+        reply: str,
+        error: str,
+    ) -> tuple[dict[str, str], dict[str, int]]:
+        last_message_path = run_dir / "artifacts" / f"{Path(role.primary_artifact).stem}.repair.last.md"
+        repair_prompt = "\n".join(
+            [
+                "# Artifact Repair",
+                f"The previous {role.role} response did not match the required artifact contract.",
+                f"Parser error: {error}",
+                "Rewrite the same content into exactly these artifact sections, in this order.",
+                "Do not add new facts. Do not wrap the answer in code fences.",
+                *[f"- <!-- artifact: {artifact.path} -->" for artifact in role.artifacts],
+                "",
+                "# Previous Response",
+                reply,
+            ]
+        )
+        result = self.runner.run(repair_prompt, run_dir, last_message_path)
+        repair_role = RoleSpec(
+            key=f"{role.key}_repair",
+            role=f"{role.role} Repair",
+            display_role=f"{role.display_role} Repair",
+            label=f"{role.label} Repair",
+            prompt=role.prompt,
+            prompt_file=role.prompt_file,
+            artifacts=role.artifacts,
+            execution=role.execution,
+            output_contract=role.output_contract,
+        )
+        self._write_role_logs(run_dir, repair_role, result)
+        repaired = _strip_markdown_fence(_read_last_message(last_message_path))
+        if result.returncode != 0:
+            raise RuntimeError(f"{role.role} artifact repair failed: {compact_codex_output(result)}")
+        sections = split_artifact_sections(repaired, role.artifact_paths)
+        usage = extract_token_usage(result.stdout)
+        self.store.append_event(
+            run_dir,
+            {"type": "role.artifact_repaired", "role": role.key, "artifacts": role.artifact_paths},
+        )
+        return sections, usage
 
     def _write_role_logs(
         self,
@@ -195,22 +382,76 @@ class WorkflowEngine:
 
 
 def _needs_revision(run_dir: Path) -> bool:
-    review_path = run_dir / "artifacts" / "05_review.md"
-    return review_path.is_file() and review_requires_revision(review_path.read_text(encoding="utf-8"))
+    decision = read_json_artifact(run_dir, "05_review_decision.json")
+    return bool(decision) and review_requires_revision(decision)
 
 
-def _agent_entry(role: RoleSpec) -> dict[str, Any]:
+def _select_candidate_name(run_dir: Path) -> str:
+    final_gate = read_json_artifact(run_dir, "07_final_verification.json")
+    candidate = final_gate.get("candidate_artifact")
+    if isinstance(candidate, str) and candidate.startswith("artifacts/"):
+        return candidate.removeprefix("artifacts/")
+    if _needs_revision(run_dir) and _is_substantive(run_dir / "artifacts" / "06_revision.md"):
+        return "06_revision.md"
+    return "04_draft.md"
+
+
+def _verified_candidate_name(run_dir: Path, final_gate: dict[str, Any]) -> str:
+    candidate = final_gate.get("candidate_artifact")
+    if isinstance(candidate, str) and candidate.startswith("artifacts/"):
+        name = candidate.removeprefix("artifacts/")
+    else:
+        name = _select_candidate_name(run_dir)
+    if name not in {"04_draft.md", "06_revision.md"}:
+        raise RuntimeError(f"invalid final candidate artifact: {name}")
+    return name
+
+
+def _read_candidate(path: Path) -> str:
+    if not path.is_file():
+        raise RuntimeError(f"final candidate is missing: {path.name}")
+    text = path.read_text(encoding="utf-8").strip()
+    if not text or text.upper() == "TBD":
+        raise RuntimeError(f"final candidate is empty or placeholder: {path.name}")
+    return text + "\n"
+
+
+def _is_substantive(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8").strip()
+    return bool(text and text.upper() != "TBD" and "TBD" not in text[:80])
+
+
+def _normalize_final_markdown(text: str) -> str:
+    return _strip_markdown_fence(text).strip() + "\n"
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _agent_entry(role: RoleSpec, started_at: str) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "key": role.key,
         "role": role.role,
         "label": role.label,
         "artifact": f"artifacts/{role.primary_artifact}",
         "artifacts": [f"artifacts/{path}" for path in role.artifact_paths],
-        "prompt": f"prompts/{role.prompt_file}",
+        "prompt": f"prompts/{role.prompt_file}" if role.prompt_file else "",
         "status": "completed",
+        "started_at": started_at,
         "completed_at": now_iso(),
+        "execution": role.execution,
     }
     return entry
+
+
+def _merge_usage(left: dict[str, int], right: dict[str, int]) -> dict[str, int]:
+    merged = dict(left)
+    for key, value in right.items():
+        merged[key] = merged.get(key, 0) + value
+    return merged
 
 
 def _read_optional(path: Path) -> str:

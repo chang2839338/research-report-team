@@ -3,53 +3,48 @@
 ## Quality-First Team Loop
 
 1. Manager
-   - Clarify the user request only when needed.
-   - Save the shared task brief as `artifacts/00_task_brief.md`.
-   - Include the canonical artifact plan in the task brief.
+   - Writes `00_task_contract.json` and `00_task_brief.md`.
+   - Stops with `needs_clarification` when user input is required.
 
 2. Researcher
-   - Gather current evidence, sources, claim status, gaps, and numeric assumptions.
-   - Save `01_research.md`, `01_sources.md`, `01_claims.md`, `01_gaps.md`, and `01_numeric_assumptions.md`.
+   - Extracts evidence, sources, preliminary claims, gaps, numbers, and provenance.
+   - Writes the `01_*` research artifact set.
 
 3. Evidence Auditor
-   - Audit source, claim, and numeric traceability before analysis.
-   - Save `02_evidence_audit.md`.
+   - Produces the authoritative admissibility gate.
+   - Blocks before analysis when evidence is incomplete or unsafe.
 
 4. Analyst
-   - Use audited evidence to define criteria, anchor values, adjustment logic, scenarios, risks, and recommendation.
-   - Save `03_analysis.md`.
+   - Builds the decision frame, option evaluation, scenarios, recommendation, and rollup.
+   - Blocks when audited evidence is insufficient for analysis.
 
 5. Writer
-   - Draft the user-facing report without adding unsupported claims.
-   - Save `04_draft.md`.
+   - Writes the reader-facing draft and internal writer trace.
 
 6. Reviewer
-   - Score the draft and audit material factual and numeric claims.
-   - Save `05_review.md`.
-   - Use `Approved`, `Approved with targeted revisions`, or `Needs revision`.
+   - Audits the draft and emits a structured review decision.
+   - Uses `approved`, `targeted_revision`, or `needs_revision`.
 
 7. Revision Writer
-   - Run only when Reviewer requests targeted revision or marks the draft as needing revision.
-   - Save `06_revision.md`.
+   - Runs only when the structured review decision requires it.
+   - Writes the revised draft and revision trace.
 
 8. Final Verifier
-   - Verify the final candidate before publication.
-   - Save `07_final_verification.md`.
+   - Emits the final publication gate.
+   - Blocks publication when required revisions or evidence caveats are unresolved.
 
-9. Publisher
-   - Produce the final Markdown report as `08_final.md`.
-   - The server then creates `08_final.docx` and `08_final_manifest.json`.
-   - Mark the run `completed` only when all final publication artifacts exist.
+9. Publisher/system
+   - Does not call Codex.
+   - Copies the verified candidate to `08_final.md`, generates DOCX, and writes the manifest.
 
 ## State Rules
 
-- Use `queued`, `running`, `needs_revision`, `publishing`, `completed`, `completed_markdown_only`, `failed`, or `cancelled`.
-- Set `needs_revision` after Reviewer returns `Needs revision` or `Approved with targeted revisions`.
-- Preserve old historical runs without migration; new runs use the `08_*` final artifact names.
+- Use `queued`, `running`, `publishing`, `completed`, `completed_markdown_only`, `blocked`, `needs_clarification`, `failed`, or `cancelled`.
+- Keep `evidence_gate`, `analysis_gate`, `review_gate`, `revision_status`, and `final_gate` separate in `status.json`.
+- Preserve old historical runs without migration.
 
 ## Context Rules
 
-- Treat `00_task_brief.md` as the shared context packet.
+- Treat `00_task_contract.json` and `00_task_brief.md` as the shared context packet.
 - Give each role only its prompt and required prior artifacts.
-- Do not pass unlimited chat history unless the task explicitly depends on it.
-- OpenAI API direct calls are not allowed; role execution stays inside `codex exec`.
+- OpenAI API direct calls are not allowed; semantic role execution stays inside `codex exec`.

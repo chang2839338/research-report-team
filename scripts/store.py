@@ -63,8 +63,9 @@ class RunStore:
 
         for role in public_roles():
             rel = role["prompt"]
-            prompt_paths[role["key"]] = rel
-            self.atomic_write_text(run_dir / rel, _scaffold_prompt(title, brief, workflow, role))
+            if rel:
+                prompt_paths[role["key"]] = rel
+                self.atomic_write_text(run_dir / rel, _scaffold_prompt(title, brief, workflow, role))
 
         for filename, template in DEFAULT_ARTIFACT_TEMPLATES.items():
             rel = f"artifacts/{filename}"
@@ -207,6 +208,7 @@ def initial_status(run_id: str, created_at: str) -> dict[str, Any]:
         "updated_at": created_at,
         "state": "queued",
         "current_role": "",
+        "current_role_started_at": "",
         "completed_roles": [],
         "failed_role": "",
         "revision_count": 0,
@@ -214,7 +216,14 @@ def initial_status(run_id: str, created_at: str) -> dict[str, Any]:
         "auto_progress": True,
         "agent_runs": [],
         "artifacts": {},
+        "task_contract": {},
+        "evidence_gate": {"decision": "not_started"},
+        "analysis_gate": {"decision": "not_started"},
+        "review_gate": {"decision": "not_started"},
+        "revision_status": {"required": False, "status": "not_started"},
+        "final_gate": {"decision": "not_started"},
         "quality_gate": {"decision": "not_started"},
+        "selected_final_candidate": "",
         "docx_status": "missing",
         "error": "",
     }

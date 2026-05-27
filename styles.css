@@ -413,8 +413,18 @@ textarea {
   grid-template-columns: repeat(var(--tab-count, 2), minmax(0, 1fr));
   gap: 8px;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--canvas) 68%, #fff);
+}
+
+.subtab-description {
+  min-height: 34px;
+  border-bottom: 1px solid var(--line);
+  padding: 0 18px 12px;
+  background: color-mix(in srgb, var(--canvas) 68%, #fff);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .subtab {
