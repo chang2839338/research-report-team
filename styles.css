@@ -219,8 +219,10 @@ textarea {
 }
 
 .run-item.active {
-  border-color: var(--accent);
+  border-color: var(--accent-dark);
   background: var(--accent-soft);
+  color: var(--accent-dark);
+  box-shadow: inset 3px 0 0 var(--accent-dark);
 }
 
 .run-item strong,
@@ -239,6 +241,11 @@ textarea {
 .run-item small {
   color: var(--muted);
   font-size: 12px;
+}
+
+.run-item.active strong,
+.run-item.active small {
+  color: var(--accent-dark);
 }
 
 .workspace {

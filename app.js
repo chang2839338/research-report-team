@@ -60,6 +60,7 @@ async function loadRuns() {
 async function loadRun(runId) {
   currentRunId = runId;
   currentRun = await apiJson(`/api/runs/${encodeURIComponent(runId)}`);
+  markActiveRunItem(runId);
   if (!currentRun.roles.some((role) => role.key === selectedRoleKey)) {
     selectedRoleKey = currentRun.roles[0]?.key || "manager";
   }
@@ -135,6 +136,7 @@ function renderRunList(runs) {
   runs.forEach((run) => {
     const button = document.createElement("button");
     button.type = "button";
+    button.dataset.runId = run.id;
     button.className = `run-item ${run.id === currentRunId ? "active" : ""}`;
     button.innerHTML = `
       <strong>${escapeHtml(run.task.title)}</strong>
@@ -142,6 +144,12 @@ function renderRunList(runs) {
     `;
     button.addEventListener("click", () => loadRun(run.id));
     elements.runList.appendChild(button);
+  });
+}
+
+function markActiveRunItem(runId) {
+  elements.runList.querySelectorAll(".run-item").forEach((item) => {
+    item.classList.toggle("active", item.dataset.runId === runId);
   });
 }
 
