@@ -24,13 +24,16 @@
    - Writes the reader-facing draft and internal writer trace.
 
 6. Reviewer
-   - Audits the draft and emits a structured review decision.
+   - Audits the active candidate and emits a structured review decision.
+   - Before Revision Writer runs, treats `04_draft.md` and `04_writer_trace.md` as active.
+   - After Revision Writer runs, treats `06_revision.md` and `06_revision_trace.md` as active, while `04_*` files become historical context.
    - Uses `approved`, `targeted_revision`, or `needs_revision`.
    - Required revisions trigger Revision Writer and Reviewer retry up to two times.
 
 7. Revision Writer
    - Runs only when the structured review decision requires it.
    - Writes the revised draft and revision trace.
+   - Makes `06_revision_trace.md` sufficient for Reviewer and Final Verifier to check required revision closure without treating the historical `04_writer_trace.md` as the active trace.
 
 8. Final Verifier
    - Emits the final publication gate.

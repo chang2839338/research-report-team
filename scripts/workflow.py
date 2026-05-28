@@ -210,6 +210,9 @@ class WorkflowEngine:
 
         final_text = _normalize_final_markdown(candidate_text)
         self.store.atomic_write_text(final_md, final_text)
+        evidence_reference = _build_evidence_reference(run_dir)
+        evidence_reference_path = run_dir / "artifacts" / "08_evidence_reference.md"
+        self.store.atomic_write_text(evidence_reference_path, evidence_reference)
 
         docx_status = "generated"
         try:
@@ -226,6 +229,8 @@ class WorkflowEngine:
             "selected_source_sha256": _sha256_text(candidate_text),
             "final_markdown": "artifacts/08_final.md",
             "final_markdown_sha256": _sha256_text(final_text),
+            "evidence_reference": "artifacts/08_evidence_reference.md",
+            "evidence_reference_sha256": _sha256_text(evidence_reference),
             "final_docx": "artifacts/08_final.docx" if final_docx.is_file() else "",
             "final_manifest": "artifacts/08_final_manifest.json",
             "docx_status": docx_status,
@@ -255,6 +260,7 @@ class WorkflowEngine:
                 "role": role.key,
                 "selected_source_artifact": f"artifacts/{candidate_name}",
                 "final_markdown": "artifacts/08_final.md",
+                "evidence_reference": "artifacts/08_evidence_reference.md",
                 "docx_status": docx_status,
                 "publication_status": manifest["publication_status"],
             },
@@ -686,6 +692,120 @@ def _is_substantive(path: Path) -> bool:
 
 def _normalize_final_markdown(text: str) -> str:
     return _strip_markdown_fence(text).strip() + "\n"
+
+
+def _build_evidence_reference(run_dir: Path) -> str:
+    sources = _parse_markdown_table(_read_optional(run_dir / "artifacts" / "01_sources.md"))
+    claims = _parse_markdown_table(_read_optional(run_dir / "artifacts" / "01_claims.md"))
+    numbers = _parse_markdown_table(_read_optional(run_dir / "artifacts" / "01_numeric_assumptions.md"))
+    lines = [
+        "# Evidence Reference",
+        "",
+        "보고서 작성에 사용된 출처 ID, 주장 ID, 숫자 ID를 사람이 읽기 쉬운 bullet list로 정리한 참고자료입니다.",
+        "",
+        "## Claims",
+        "",
+        *_claim_bullets(claims),
+        "",
+        "## Numbers",
+        "",
+        *_number_bullets(numbers),
+        "",
+        "## Sources",
+        "",
+        *_source_bullets(sources),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _parse_markdown_table(text: str) -> list[dict[str, str]]:
+    headers: list[str] = []
+    rows: list[dict[str, str]] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("|") or not line.endswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if not headers:
+            headers = cells
+            continue
+        if all(set(cell.replace(":", "").strip()) <= {"-"} for cell in cells):
+            continue
+        if len(cells) < len(headers):
+            cells.extend([""] * (len(headers) - len(cells)))
+        rows.append(dict(zip(headers, cells)))
+    return rows
+
+
+def _claim_bullets(rows: list[dict[str, str]]) -> list[str]:
+    if not rows:
+        return ["- 정리할 Claim ID가 없습니다."]
+    bullets = []
+    for row in rows:
+        claim_id = row.get("Claim ID", "").strip()
+        claim = row.get("Claim", "").strip()
+        details = _join_detail_parts(
+            [
+                ("근거", row.get("Evidence IDs", "").strip()),
+                ("예비판정", row.get("Preliminary support", "").strip()),
+                ("신뢰도", row.get("Confidence", "").strip()),
+                ("메모", row.get("Notes", "").strip()),
+            ]
+        )
+        bullets.append(f"- [{claim_id}] {claim}{details}")
+    return bullets
+
+
+def _number_bullets(rows: list[dict[str, str]]) -> list[str]:
+    if not rows:
+        return ["- 정리할 Number ID가 없습니다."]
+    bullets = []
+    for row in rows:
+        number_id = row.get("Number ID", "").strip()
+        value = _join_nonempty([row.get("Value", "").strip(), row.get("Unit", "").strip()], " ")
+        details = _join_detail_parts(
+            [
+                ("값", value),
+                ("기간", row.get("Period", "").strip()),
+                ("출처", row.get("Source ID", "").strip()),
+                ("구분", row.get("Direct Or Derived", "").strip()),
+                ("신뢰도", row.get("Confidence", "").strip()),
+                ("메모", row.get("Notes", "").strip()),
+            ]
+        )
+        bullets.append(f"- [{number_id}]{details}")
+    return bullets
+
+
+def _source_bullets(rows: list[dict[str, str]]) -> list[str]:
+    if not rows:
+        return ["- 정리할 Source ID가 없습니다."]
+    bullets = []
+    for row in rows:
+        source_id = row.get("Source ID", "").strip()
+        source = row.get("Source", "").strip()
+        details = _join_detail_parts(
+            [
+                ("발행기관", row.get("Publisher", "").strip()),
+                ("날짜", row.get("Date", "").strip()),
+                ("유형", row.get("Type", "").strip()),
+                ("신뢰도", row.get("Credibility", "").strip()),
+                ("용도", row.get("Relevance", "").strip()),
+                ("한계", row.get("Limitation", "").strip()),
+            ]
+        )
+        bullets.append(f"- [{source_id}] {source}{details}")
+    return bullets
+
+
+def _join_detail_parts(parts: list[tuple[str, str]]) -> str:
+    values = [f"{label}: {value}" for label, value in parts if value]
+    return f" ({'; '.join(values)})" if values else ""
+
+
+def _join_nonempty(values: list[str], separator: str) -> str:
+    return separator.join(value for value in values if value)
 
 
 def _sha256_text(text: str) -> str:

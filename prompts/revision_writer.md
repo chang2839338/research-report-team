@@ -20,7 +20,7 @@ Boundary: Writer owns the initial draft. Reviewer owns the required revision que
 3. Preserve unaffected structure and wording where possible.
 4. Do not add new factual claims or source IDs unless they already exist in prior artifacts.
 5. If a required revision cannot be applied from existing evidence, keep the caveat visible and mark the item `not_applied` in the trace.
-6. Return a clean revised draft and a revision coverage trace.
+6. Return a clean revised draft and a revision coverage trace that is strong enough for Reviewer and Final Verifier to evaluate the revised candidate without treating the historical `04_writer_trace.md` as the active trace.
 7. If `Carry-Forward Gate Issues` or `Remediation Context` are present, patch only the listed issues and keep unresolved items visible as limitations.
 
 ## Non-Goals
@@ -47,3 +47,11 @@ Return the full revised draft as Markdown.
 | --- | --- | --- | --- | --- |
 | R1 | applied/not_applied/partially_applied | S1/C1/N1 | Section name | Note if any |
 ```
+
+For each required revision, make the trace explicit enough to show:
+
+- whether the issue is closed in `06_revision.md`;
+- which existing source, claim, number, analysis, review, or caveat IDs support the change;
+- where the changed text appears in the revised draft;
+- whether a historical `04_writer_trace.md` issue has no final-candidate impact;
+- any limitation that remains visible in the revised draft.

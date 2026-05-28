@@ -22,6 +22,7 @@ Boundary: Reviewer audits the draft. Revision Writer patches required items. Fin
 4. Check that Evidence Auditor caveats/exclusions remain respected.
 5. Decide whether the deterministic Publisher can copy the candidate to `08_final.md`.
 6. If `Carry-Forward Gate Issues` are present, verify that the candidate visibly discloses them and put them in `carry_forward_caveats` or blocker lists as appropriate.
+7. When `06_revision.md` is the active candidate, use `06_revision_trace.md` as the active trace for required revision closure. Treat `04_writer_trace.md` as historical context and do not block publication solely because a historical trace issue is absent from the final candidate and closed in the revision trace.
 
 ## Non-Goals
 

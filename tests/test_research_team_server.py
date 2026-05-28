@@ -91,6 +91,7 @@ not json
             "05_claim_audit.md",
             "06_revision_trace.md",
             "07_final_verification.json",
+            "08_evidence_reference.md",
             "08_final_manifest.json",
         ]:
             self.assertIn(artifact, contracts.all_artifact_paths())
@@ -137,11 +138,17 @@ class WorkflowHarnessTests(unittest.TestCase):
             self.assertEqual(status["docx_status"], "generated")
             self.assertEqual(status["selected_final_candidate"], "artifacts/04_draft.md")
             self.assertEqual(manifest["selected_source_artifact"], "artifacts/04_draft.md")
+            self.assertEqual(manifest["evidence_reference"], "artifacts/08_evidence_reference.md")
             self.assertEqual(manifest["publication_status"], "completed")
             self.assertEqual(status["unresolved_gate_issues"], [])
             self.assertIn("selected_source_sha256", manifest)
+            self.assertIn("evidence_reference_sha256", manifest)
             self.assertEqual(len(runner.prompts), 7)
             self.assertTrue((run_dir / "artifacts" / "08_final.md").is_file())
+            evidence_reference = (run_dir / "artifacts" / "08_evidence_reference.md").read_text(encoding="utf-8")
+            self.assertIn("- [C1] Claim", evidence_reference)
+            self.assertIn("- [N1]", evidence_reference)
+            self.assertIn("- [S1] [Source](https://example.com)", evidence_reference)
             self.assertTrue((run_dir / "artifacts" / "08_final.docx").is_file())
 
     def test_manager_clarification_pauses_before_research(self):
@@ -151,7 +158,8 @@ class WorkflowHarnessTests(unittest.TestCase):
             _write_prompts(root)
             store = RunStore(root / "runs")
             run_dir = store.create_run("run2", "제목", "요청", "quality-first")
-            engine = WorkflowEngine(root, store, FakeRunner(replies))
+            runner = FakeRunner(replies)
+            engine = WorkflowEngine(root, store, runner)
 
             engine.run_workflow("run2")
 
@@ -244,7 +252,8 @@ class WorkflowHarnessTests(unittest.TestCase):
             _write_prompts(root)
             store = RunStore(root / "runs")
             run_dir = store.create_run("run5", "제목", "요청", "quality-first")
-            engine = WorkflowEngine(root, store, FakeRunner(replies))
+            runner = FakeRunner(replies)
+            engine = WorkflowEngine(root, store, runner)
 
             engine.run_workflow("run5")
 
@@ -255,6 +264,11 @@ class WorkflowHarnessTests(unittest.TestCase):
             self.assertEqual(status["revision_count"], 1)
             self.assertEqual(status["selected_final_candidate"], "artifacts/06_revision.md")
             self.assertIn("Revised Draft", final_text)
+            reviewer_retry_prompt = runner.prompts[7]
+            self.assertIn("# Input: artifacts/06_revision.md", reviewer_retry_prompt)
+            self.assertIn("Revised Draft", reviewer_retry_prompt)
+            self.assertIn("# Input: artifacts/06_revision_trace.md", reviewer_retry_prompt)
+            self.assertIn("Revision Trace", reviewer_retry_prompt)
 
     def test_reviewer_revision_exhaustion_continues_to_final_report(self):
         replies = [
@@ -362,6 +376,7 @@ class WorkflowHarnessTests(unittest.TestCase):
             store.scaffold_workspace(run_dir, "제목", "요청", "codex-quality-first-local-web", True)
             task = store.read_json(run_dir / "task.json")
             self.assertEqual(task["outputs"]["final_markdown"], "artifacts/08_final.md")
+            self.assertEqual(task["outputs"]["evidence_reference"], "artifacts/08_evidence_reference.md")
             self.assertEqual(task["outputs"]["final_docx"], "artifacts/08_final.docx")
             self.assertEqual(task["outputs"]["final_manifest"], "artifacts/08_final_manifest.json")
             self.assertTrue((run_dir / "artifacts" / "08_final.docx").is_file())

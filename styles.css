@@ -395,13 +395,44 @@ textarea {
 }
 
 .panel-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-height: 72px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  align-items: flex-start;
+  column-gap: 14px;
+  row-gap: 6px;
   padding: 16px 18px;
   border-bottom: 1px solid var(--line);
+}
+
+.panel-head > div:first-child {
+  display: contents;
+}
+
+#selectedRole {
+  color: var(--accent-dark);
+  display: -webkit-box;
+  grid-column: 1;
+  grid-row: 1;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+#selectedLabel {
+  display: -webkit-box;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  overflow: hidden;
+  color: var(--body);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
 }
 
 .state-badge {
@@ -442,9 +473,12 @@ textarea {
 
 .panel-meta {
   display: flex;
+  grid-column: 2;
+  grid-row: 1;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+  padding-top: 2px;
 }
 
 .token-badge {
@@ -467,14 +501,15 @@ textarea {
 }
 
 .subtab-description {
-  min-height: 34px;
   border-bottom: 1px solid var(--line);
-  padding: 0 18px 12px;
+  padding: 8px 18px 10px;
   background: color-mix(in srgb, var(--canvas) 68%, #fff);
   color: var(--muted);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.45;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .subtab {

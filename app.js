@@ -17,7 +17,7 @@ const STATUS = {
 
 const TERMINAL_STATES = new Set(["completed", "completed_with_unresolved_issues", "completed_markdown_only", "failed", "blocked", "cancelled", "needs_clarification"]);
 
-const DISPLAY_LAST_ARTIFACTS = new Set(["03_analysis.md", "04_draft.md", "05_review.md", "06_revision.md"]);
+const DISPLAY_LAST_ARTIFACTS = new Set(["01_research.md", "03_analysis.md", "04_draft.md", "05_review.md", "06_revision.md"]);
 
 const elements = {
   runForm: document.querySelector("#runForm"),
@@ -38,45 +38,46 @@ const elements = {
 };
 
 const ROLE_DESCRIPTIONS = {
-  manager: "작업 목표와 산출물 계약을 구조화합니다.",
-  researcher: "근거, 출처, 주장, 숫자, 공백을 추출합니다.",
-  evidence_auditor: "근거의 사용 가능성과 제한 사항을 판정합니다.",
-  analyst: "감사된 근거로 의사결정 모델을 작성합니다.",
-  writer: "분석을 독자용 보고서 초안으로 작성합니다.",
-  reviewer: "초안의 품질, 근거, 추적성을 감사합니다.",
-  revision_writer: "검토자가 지정한 수정만 반영합니다.",
-  final_verifier: "최종 후보의 발행 가능 여부를 확인합니다.",
-  publisher: "검증된 후보를 최종 산출물로 발행합니다.",
+  manager: "사용자의 요청을 읽고 보고서 작업의 기준을 정합니다. 목표, 독자, 범위, 근거 기준, 각 Agent가 해야 할 일을 먼저 정리합니다.",
+  researcher: "보고서에 쓸 수 있는 자료를 모으는 담당자입니다. 웹이나 제공된 자료에서 사실, 숫자, 출처, 쟁점, 아직 확인되지 않은 부분을 분리해 정리합니다.",
+  evidence_auditor: "Researcher가 모은 자료를 보고 이 근거를 실제 분석에 써도 되는지 판정합니다. 출처가 약하거나 숫자 근거가 불명확하면 제한을 걸거나 제외합니다.",
+  analyst: "검증된 근거만 사용해 실제 판단 구조를 만듭니다. 선택지, 평가 기준, 시나리오, 리스크, 추천 논리를 정리합니다.",
+  writer: "Analyst가 만든 판단 구조를 읽고 실제 독자가 볼 보고서 초안을 씁니다. 새 근거를 만들지 않고 검증된 내용을 읽기 좋은 문장으로 바꿉니다.",
+  reviewer: "보고서 초안이 제대로 작성됐는지 검사합니다. 목표에 맞는지, 근거 없는 주장이 있는지, 숫자와 분석 결론이 추적 가능한지 확인합니다.",
+  revision_writer: "Reviewer가 지정한 필수 수정사항만 반영합니다. 전체를 새로 쓰지 않고 지적된 문제를 고친 뒤 수정 이력을 남깁니다.",
+  final_verifier: "최종 발행 직전에 보고서 후보를 마지막으로 확인합니다. 필수 수정 반영, 새로 생긴 근거 없는 주장, 빠진 주의 문구가 없는지 봅니다.",
+  publisher: "검증이 끝난 보고서 후보를 최종 파일로 포장하는 시스템 단계입니다. 내용을 새로 쓰지 않고 Markdown, Word, 발행 기록을 만듭니다.",
 };
 
 const VIEW_DESCRIPTIONS = {
-  prompt: "Agent 실행에 사용된 전체 프롬프트입니다.",
-  "00_task_contract.json": "작업 진행 여부와 요구사항을 담은 구조화 계약입니다.",
-  "00_task_brief.md": "후속 Agent가 공유하는 사람이 읽는 작업 요약입니다.",
-  "01_research.md": "조사 계획과 핵심 근거 메모입니다.",
-  "01_sources.md": "사용된 출처의 ID, 날짜, 신뢰도, 한계입니다.",
-  "01_claims.md": "주장 ID와 출처 ID의 예비 연결표입니다.",
-  "01_gaps.md": "근거 공백, 미해결 주장, 후속 검색 항목입니다.",
-  "01_numeric_assumptions.md": "숫자, 기간, 단위, 출처를 추적하는 장부입니다.",
-  "01_source_provenance.md": "검색어, 접근 경로, URL, 접근일의 출처 이력입니다.",
-  "02_evidence_gate.json": "분석 진행 가능 여부를 결정하는 근거 게이트입니다.",
-  "02_evidence_audit.md": "근거 사용, 제외, caveat 지침의 사람이 읽는 감사 결과입니다.",
-  "03a_decision_frame.md": "의사결정 질문, 옵션, 기준, 제약을 정리합니다.",
-  "03b_option_evaluation.md": "옵션별 기준 평가와 근거 ID를 비교합니다.",
-  "03c_scenarios_and_recommendation.md": "시나리오, 조정 논리, 추천안을 정리합니다.",
-  "03_analysis.md": "Writer가 사용할 분석 요약본입니다.",
-  "03_analysis_status.json": "분석 결과가 작성 단계로 넘어갈 수 있는지 나타냅니다.",
-  "04_draft.md": "독자에게 보여줄 보고서 초안입니다.",
-  "04_writer_trace.md": "초안의 핵심 주장과 근거 ID를 연결한 추적표입니다.",
-  "05_review_decision.json": "검토 통과/수정 필요 여부와 수정 ID를 담은 결정값입니다.",
-  "05_review.md": "초안 품질에 대한 사람이 읽는 검토 결과입니다.",
-  "05_claim_audit.md": "초안 내 주장별 근거 추적성 감사표입니다.",
-  "06_revision.md": "필수 수정사항이 반영된 개정 초안입니다.",
-  "06_revision_trace.md": "수정 ID별 반영 여부와 변경 위치입니다.",
-  "07_final_verification.json": "최종 발행 가능 여부를 결정하는 게이트입니다.",
-  "07_final_verification.md": "최종 후보 검증의 사람이 읽는 결과입니다.",
-  "08_final.md": "검증된 후보를 복사한 최종 Markdown 보고서입니다.",
-  "08_final_manifest.json": "발행 시각, 선택 후보, 해시, caveat, DOCX 상태입니다.",
+  prompt: "선택한 Agent에게 실제로 입력된 지시문입니다. 실행 맥락, 역할 지침, 이전 단계 산출물, 참고 문서가 함께 들어갑니다.",
+  "00_task_contract.json": "프로그램이 다음 단계들을 자동으로 진행하기 위해 읽는 구조화된 작업 지시서입니다. 보고서 목표, 독자, 범위, 근거 기준, 각 Agent가 해야 할 일이 JSON으로 정리됩니다.",
+  "00_task_brief.md": "사람이 읽기 쉽게 풀어쓴 작업 지시 설명서입니다. 이후 Agent들이 이번 작업의 목적과 범위를 이해하는 기준 문서입니다.",
+  "01_research.md": "조사 결과를 문장으로 정리한 파일입니다. 어떤 사실들이 확인됐는지, 어떤 충돌이나 한계가 있는지 적습니다.",
+  "01_sources.md": "사용한 출처 목록입니다. 각 출처에 ID를 붙이고 발행기관, 날짜, 신뢰도, 보고서에 쓸 때의 한계를 적습니다.",
+  "01_claims.md": "보고서에 들어갈 수 있는 주장과 그 주장을 뒷받침하는 출처를 연결한 표입니다. 아직 최종 검증 전의 예비 연결 상태를 보여줍니다.",
+  "01_gaps.md": "아직 근거가 부족하거나 확인이 어려운 부분을 따로 모은 파일입니다. 후속 조사나 보고서의 주의 문구로 이어질 수 있습니다.",
+  "01_numeric_assumptions.md": "보고서에 쓰이는 숫자들을 따로 관리하는 파일입니다. 숫자값, 단위, 기간, 출처, 직접 인용인지 계산값인지 등을 적습니다.",
+  "01_source_provenance.md": "각 출처를 어떤 검색어나 경로로 찾았는지 남기는 기록입니다. 나중에 출처 추적과 검증에 사용됩니다.",
+  "02_evidence_gate.json": "Researcher가 모은 근거를 실제 분석에 써도 되는지 기계가 읽을 수 있게 판정한 파일입니다. 사용 가능, 주의 문구 필요, 제외, 추가 조사 필요 같은 상태가 들어갑니다.",
+  "02_evidence_audit.md": "근거 판정을 사람이 이해할 수 있게 설명한 파일입니다. 어떤 근거는 써도 되고, 어떤 근거는 주의 문구를 붙이거나 제외해야 하는지 정리합니다.",
+  "03a_decision_frame.md": "이번 보고서가 풀어야 할 의사결정 질문을 정리한 파일입니다. 비교할 선택지, 평가 기준, 제약조건을 먼저 맞춥니다.",
+  "03b_option_evaluation.md": "각 선택지를 같은 기준으로 비교한 표입니다. 평가 내용이 어떤 근거 ID에 기대고 있는지도 함께 보여줍니다.",
+  "03c_scenarios_and_recommendation.md": "시나리오별 결과와 추천 방향을 정리한 파일입니다. 추천이 바뀔 수 있는 조건과 주요 리스크도 함께 적습니다.",
+  "03_analysis.md": "Writer가 보고서 초안을 쓸 때 바로 참고할 수 있도록 분석 내용을 요약한 파일입니다. 추천 논리, 비교 결과, 반드시 남겨야 할 주의 문구가 들어갑니다.",
+  "03_analysis_status.json": "분석이 충분한 근거 위에서 진행됐는지 표시하는 상태 파일입니다. 준비 완료인지, 추가 조사가 필요한지, 차단 사유가 있는지 알려줍니다.",
+  "04_draft.md": "독자가 실제로 읽게 될 보고서 초안입니다. 앞 단계에서 검증된 근거와 분석 논리를 바탕으로 작성됩니다.",
+  "04_writer_trace.md": "초안 안의 주요 주장들이 어떤 출처, 숫자, 분석 결과에서 왔는지 연결해 둔 추적표입니다. 이 문장이 어디서 나온 말인지 확인할 때 씁니다.",
+  "05_review_decision.json": "초안을 승인할지, 일부 수정이 필요한지, 큰 수정이 필요한지 판단한 파일입니다. 수정이 필요하면 R1, R2 같은 수정 항목 ID가 들어갑니다.",
+  "05_review.md": "사람이 읽는 검토 의견입니다. 점수, 문제점, 필수 수정사항, 승인 여부가 정리됩니다.",
+  "05_claim_audit.md": "보고서 초안의 주요 주장별로 근거가 제대로 연결되어 있는지 확인한 표입니다. 근거 없는 문장이나 추적이 약한 부분을 찾는 데 씁니다.",
+  "06_revision.md": "Reviewer가 요구한 필수 수정사항이 반영된 개정 보고서 초안입니다. 새 보고서를 쓰는 것이 아니라 지정된 문제를 고친 결과입니다.",
+  "06_revision_trace.md": "각 수정 요청 ID가 실제로 반영됐는지 기록한 파일입니다. 어디가 바뀌었고, 반영하지 못한 항목이 있는지 확인할 수 있습니다.",
+  "07_final_verification.json": "최종 발행 가능 여부를 판단한 파일입니다. 발행 가능, 주의사항을 달고 가능, 발행 차단 같은 결과가 들어갑니다.",
+  "07_final_verification.md": "최종 검증 결과를 사람이 읽기 쉽게 설명한 파일입니다. 필수 수정 반영, 근거 추적, 주의 문구 보존 여부를 확인합니다.",
+  "08_final.md": "검증된 후보를 복사해 만든 최종 Markdown 보고서입니다. 최종본의 기준이 되는 텍스트 파일입니다.",
+  "08_evidence_reference.md": "보고서 작성에 사용된 C, N, S ID를 사람이 읽기 쉬운 bullet list로 다시 정리한 참고자료입니다.",
+  "08_final_manifest.json": "최종 발행 내역을 기록한 파일입니다. 어떤 후보를 최종본으로 선택했는지, Word 파일 생성 상태와 남은 주의사항은 무엇인지 적습니다.",
 };
 
 let currentRun = null;
@@ -163,7 +164,7 @@ function render() {
   elements.statusMessage.title = runStatus.title;
   elements.statusMessage.dataset.state = status.state || "";
   elements.selectedRole.textContent = formatRoleHeading(selectedRole);
-  elements.selectedLabel.textContent = selectedRole.label;
+  elements.selectedLabel.textContent = formatRoleDescription(selectedRole);
   elements.selectedTokens.textContent = formatUsageAndDuration(usage, roleDuration);
   elements.selectedTokens.title = formatTokenUsageDetail(usage);
   elements.selectedState.textContent = selectedState;
@@ -180,6 +181,8 @@ function renderEmpty() {
   delete elements.statusMessage.dataset.state;
   elements.stepList.innerHTML = "";
   renderDetail("\uc9c4\ud589 \ub2e8\uacc4\uc5d0\uc11c Agent\ub97c \uc120\ud0dd\ud558\uc138\uc694.");
+  elements.selectedRole.textContent = "Manager";
+  elements.selectedLabel.textContent = ROLE_DESCRIPTIONS.manager;
   elements.selectedTokens.textContent = "\ud1a0\ud070 - \u00b7 \uc18c\uc694\uc2dc\uac04 -";
   elements.selectedTokens.title = "";
   elements.selectedState.textContent = "\ub300\uae30";
@@ -271,6 +274,10 @@ async function loadVisibleFiles() {
   if (!currentRun) return;
   const selectedRole = findSelectedRole();
   const view = viewsForRole(selectedRole).find((item) => item.key === selectedView);
+  if (isRevisionSkipped(selectedRole)) {
+    renderDetail("Reviewer가 승인하여 Revision 단계는 실행되지 않았습니다.");
+    return;
+  }
   const path = view?.path || "";
   const detail = await readRunFile(path);
   const visibleDetail = selectedView === "prompt" ? summarizePromptInputs(detail) : detail;
@@ -361,6 +368,10 @@ function isPromptSectionHeading(line) {
 function readRunFile(path) {
   if (!currentRunId || !path) return "";
   return apiText(`/api/runs/${encodeURIComponent(currentRunId)}/files?path=${encodeURIComponent(path)}`);
+}
+
+function isRevisionSkipped(role) {
+  return role?.key === "revision_writer" && currentRun?.status?.revision_status?.status === "not_required";
 }
 
 function schedulePolling() {
@@ -518,8 +529,11 @@ function formatNumber(value) {
 }
 
 function formatRoleHeading(role) {
-  const name = role.display_role || role.role;
-  return `${name} : ${ROLE_DESCRIPTIONS[role.key] || "\uc774 \ub2e8\uacc4\uc758 \uc0b0\ucd9c\ubb3c\uc744 \uc0dd\uc131\ud569\ub2c8\ub2e4."}`;
+  return role.display_role || role.role;
+}
+
+function formatRoleDescription(role) {
+  return ROLE_DESCRIPTIONS[role.key] || "\uc774 \ub2e8\uacc4\uc758 \uc0b0\ucd9c\ubb3c\uc744 \uc0dd\uc131\ud569\ub2c8\ub2e4.";
 }
 
 function descriptionForView(view) {

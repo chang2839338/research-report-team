@@ -75,6 +75,7 @@ DEFAULT_ARTIFACT_TEMPLATES: dict[str, str] = {
     "07_final_verification.json": "{}\n",
     "07_final_verification.md": "# Final Verification\n\nTBD\n",
     "08_final.md": "# Final Report\n\nTBD\n",
+    "08_evidence_reference.md": "# Evidence Reference\n\nTBD\n",
     "08_final_manifest.json": "{}\n",
 }
 
@@ -215,9 +216,11 @@ WORKFLOW: tuple[RoleSpec, ...] = (
             "03_analysis.md",
             "04_draft.md",
             "04_writer_trace.md",
+            "06_revision.md",
+            "06_revision_trace.md",
         ),
         extra_inputs=("references/report-quality-rubric.md",),
-        goal="Audit the draft, trace map, and recommendation; produce a structured revision decision.",
+        goal="Audit the active candidate, trace map, and recommendation; produce a structured revision decision.",
         output_contract="json_gate_plus_markdown",
     ),
     RoleSpec(
@@ -293,9 +296,10 @@ WORKFLOW: tuple[RoleSpec, ...] = (
         prompt_file="",
         artifacts=(
             ArtifactSpec("08_final.md", "Final Report"),
+            ArtifactSpec("08_evidence_reference.md", "Evidence Reference"),
             ArtifactSpec("08_final_manifest.json", "Final Manifest"),
         ),
-        goal="Deterministically publish the verified candidate. The server creates 08_final.docx.",
+        goal="Deterministically publish the verified candidate and readable evidence reference. The server creates 08_final.docx.",
         execution=SYSTEM,
         output_contract="system_publish",
     ),

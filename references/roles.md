@@ -38,6 +38,7 @@ Manager contracts; Researcher extracts; Evidence Auditor gates; Analyst decides;
 ## Reviewer
 
 - Audits the draft and writer trace against the task, evidence gate, and analysis.
+- After Revision Writer runs, audits `06_revision.md` and `06_revision_trace.md` as the active candidate and trace; `04_draft.md` and `04_writer_trace.md` become historical context.
 - Emits a structured review decision and required revision IDs.
 - Does not rewrite the report.
 
@@ -45,6 +46,7 @@ Manager contracts; Researcher extracts; Evidence Auditor gates; Analyst decides;
 
 - Applies only required revision IDs from the review decision.
 - Produces a revised draft and revision trace.
+- Makes the revision trace sufficient to close required revision IDs against the revised candidate.
 - Does not perform optional rewriting.
 
 ## Final Verifier

@@ -37,6 +37,7 @@ class RunStore:
             "api_calls": False,
             "outputs": {
                 "final_markdown": "artifacts/08_final.md",
+                "evidence_reference": "artifacts/08_evidence_reference.md",
                 "final_docx": "artifacts/08_final.docx",
                 "final_manifest": "artifacts/08_final_manifest.json",
             },
@@ -86,6 +87,7 @@ class RunStore:
             "auto_progress": auto_progress,
             "outputs": {
                 "final_markdown": "artifacts/08_final.md",
+                "evidence_reference": "artifacts/08_evidence_reference.md",
                 "final_docx": "artifacts/08_final.docx",
                 "final_manifest": "artifacts/08_final_manifest.json",
             },
