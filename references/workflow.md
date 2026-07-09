@@ -1,66 +1,58 @@
 # Workflow Reference
 
-## Team Loop
+## Quality-First Team Loop
 
-1. Intake
-   - Restate the request in one or two sentences.
-   - Identify missing details that materially affect the result.
-   - Ask one focused question when needed.
+1. Manager
+   - Writes `00_task_contract.json` and `00_task_brief.md`.
+   - Stops with `needs_clarification` when user input is required.
 
-2. Task Brief
-   - Decision goal
-   - Target reader
-   - Output format
-   - Scope and exclusions
-   - Constraints
-   - Acceptance criteria
-   - Assumptions
+2. Researcher
+   - Extracts evidence, sources, preliminary claims, gaps, numbers, and provenance.
+   - Writes the `01_*` research artifact set.
 
-3. Work Plan
-   - Break the work into 3-6 tasks.
-   - Assign each task to a role.
-   - Define expected output for each task.
+3. Evidence Auditor
+   - Produces the authoritative admissibility gate.
+   - Triggers targeted Researcher remediation when evidence is incomplete or unsafe.
+   - After two failed remediation attempts, records unresolved evidence issues and continues with caveats.
 
-4. Research
-   - Browse or inspect provided materials when current facts or citations matter.
-   - Keep source notes compact.
-   - Prefer primary or authoritative sources for high-stakes claims.
+4. Analyst
+   - Builds the decision frame, option evaluation, scenarios, recommendation, and rollup.
+   - Triggers Researcher/Evidence remediation when audited evidence is insufficient for analysis.
+   - After two failed remediation attempts, records unresolved analysis issues and continues with caveats.
 
-5. Analysis
-   - Define criteria before comparing options.
-   - Make tradeoffs explicit.
-   - Separate recommendation from supporting evidence.
+5. Writer
+   - Writes the reader-facing draft and internal writer trace.
 
-6. Draft
-   - Use the user's requested format first.
-   - If absent, use a decision brief.
-   - Preserve citations, caveats, and assumptions.
+6. Reviewer
+   - Audits the active candidate and emits a structured review decision.
+   - Before Revision Writer runs, treats `04_draft.md` and `04_writer_trace.md` as active.
+   - After Revision Writer runs, treats `06_revision.md` and `06_revision_trace.md` as active, while `04_*` files become historical context.
+   - Uses `approved`, `targeted_revision`, or `needs_revision`.
+   - Required revisions trigger Revision Writer and Reviewer retry up to two times.
 
-7. Review
-   - Score against the quality rubric.
-   - Request revision for material failures.
-   - Limit revision requests to the smallest useful set.
+7. Revision Writer
+   - Runs only when the structured review decision requires it.
+   - Writes the revised draft and revision trace.
+   - Makes `06_revision_trace.md` sufficient for Reviewer and Final Verifier to check required revision closure without treating the historical `04_writer_trace.md` as the active trace.
 
-8. Final Delivery
-   - Lead with answer and recommendation.
-   - Include evidence, rationale, risks, caveats, and next actions.
-   - Mention unverified assumptions.
+8. Final Verifier
+   - Emits the final publication gate.
+   - Triggers Revision Writer and final verification retry when required revisions or evidence caveats are unresolved.
+   - After two failed remediation attempts, records unresolved final issues and allows conditional publication.
 
-## Revision Rules
+9. Publisher/system
+   - Does not call Codex.
+   - Copies the verified candidate to `08_final.md`, generates DOCX, and writes the manifest.
 
-Request revision when:
-- The output does not answer the decision goal.
-- The recommendation is unsupported.
-- Current factual claims lack citations.
-- Important alternatives, risks, or constraints are missing.
-- The format does not match the user's requested deliverable.
+## State Rules
 
-Use at most two internal revision loops unless the user explicitly asks for exhaustive refinement.
+- Use `queued`, `running`, `remediating`, `continuing_with_issues`, `publishing`, `completed`, `completed_with_unresolved_issues`, `completed_markdown_only`, `blocked`, `needs_clarification`, `failed`, or `cancelled`.
+- Keep `evidence_gate`, `analysis_gate`, `review_gate`, `revision_status`, and `final_gate` separate in `status.json`.
+- Keep exhausted gate issues in `unresolved_gate_issues` and carry them into downstream prompts.
+- Preserve old historical runs without migration.
 
-## Web-App Ready Design Notes
+## Context Rules
 
-Keep agent-team logic independent from the interface:
-- Core: task brief, roles, workflow, review loop, report template.
-- Interfaces: Codex skill, CLI, API, web app, mobile web.
-- Storage: task state, messages, sources, artifacts, review notes.
-
+- Treat `00_task_contract.json` and `00_task_brief.md` as the shared context packet.
+- Give each role only its prompt and required prior artifacts.
+- OpenAI API direct calls are not allowed; semantic role execution stays inside `codex exec`.

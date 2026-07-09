@@ -79,15 +79,15 @@ Skill is valid!
 From the repo root:
 
 ```powershell
-python .\scripts\research_team_cli.py "AI agent team 업무 방식 의사결정 보고서" --title "AI Agent Team Decision Brief" --out .\tmp-cli-test
+python .\scripts\research_team_cli.py "AI agent team 업무 방식 의사결정 보고서" --title "AI Agent Team Decision Brief"
 ```
 
 Expected result:
 
-- A new folder appears under `tmp-cli-test`.
+- A new timestamped folder appears under `runs`, such as `runs/20260525_1338`.
 - The folder includes `task.json`, `status.json`, `sources.md`, `prompts/`, and `artifacts/`.
-- `prompts/` includes Manager, Researcher, Analyst, Writer, and Reviewer prompt files with task context.
-- `artifacts/` includes placeholders for research, analysis, draft, review, and final report.
+- `prompts/` includes numbered Codex role prompt files from `00_manager.md` through `07_final_verifier.md`; Publisher is a system step.
+- `artifacts/` includes the quality-first artifact set from `00_task_contract.json` through `08_final.md`, plus `08_final.docx` and `08_final_manifest.json`.
 
 After testing, delete the temporary folder if it is not needed.
 

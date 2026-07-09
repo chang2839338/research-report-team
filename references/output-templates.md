@@ -39,6 +39,10 @@
 1. [Action]
 2. [Action]
 3. [Action]
+
+## Source ID Summary
+
+- S1: [Source name](URL)
 ```
 
 ## Executive Report
@@ -79,6 +83,10 @@
 ## Sources
 
 - [Source name](URL)
+
+## Source ID Summary
+
+- S1: [Source name](URL)
 ```
 
 ## Research Memo
@@ -110,5 +118,8 @@
 ## Sources
 
 - [Source name](URL)
-```
 
+## Source ID Summary
+
+- S1: [Source name](URL)
+```
