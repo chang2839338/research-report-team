@@ -83,11 +83,11 @@ API 호출, 독립 LLM worker, 웹앱은 지금 당장 만들지 않는다. Chat
 
 예상 산출물:
 
-- `prompts/manager.md`
-- `prompts/researcher.md`
-- `prompts/analyst.md`
-- `prompts/writer.md`
-- `prompts/reviewer.md`
+- `prompts/01_manager.md`
+- `prompts/02_researcher.md`
+- `prompts/03_analyst.md`
+- `prompts/04_writer.md`
+- `prompts/05_reviewer.md`
 - `references/task-contract.md`
 
 검증:
@@ -114,22 +114,24 @@ API 호출, 독립 LLM worker, 웹앱은 지금 당장 만들지 않는다. Chat
 권장 작업 폴더 구조:
 
 ```text
-research-team-runs/
-  <timestamp-task-slug>/
+runs/
+  <YYYYMMDD_HHMM>/
     task.json
     status.json
     prompts/
-      manager.md
-      researcher.md
-      analyst.md
-      writer.md
-      reviewer.md
+      01_manager.md
+      02_researcher.md
+      03_analyst.md
+      04_writer.md
+      05_reviewer.md
     artifacts/
-      research.md
-      analysis.md
-      draft.md
-      review.md
-      final.md
+      00_task_brief.md
+      01_research.md
+      02_analysis.md
+      03_draft.md
+      04_review.md
+      05_final.md
+      05_final.docx
     sources.md
 ```
 
@@ -254,7 +256,7 @@ python "C:\Users\SINI\.codex\skills\.system\skill-creator\scripts\quick_validate
 CLI 검증:
 
 ```powershell
-python .\scripts\research_team_cli.py "AI agent team 업무 방식 의사결정 보고서" --title "AI Agent Team Decision Brief" --out .\tmp-cli-test
+python .\scripts\research_team_cli.py "AI agent team 업무 방식 의사결정 보고서" --title "AI Agent Team Decision Brief"
 ```
 
 GitHub 검증:
